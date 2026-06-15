@@ -17,6 +17,7 @@ packages = ["tripoptimizer"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# --cov flags need the dev extras (pytest-cov); always run inside the uv venv
 addopts = "-q --cov=tripoptimizer --cov-report=term-missing"
 
 [tool.ruff]

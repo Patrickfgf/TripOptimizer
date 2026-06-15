@@ -36,3 +36,12 @@ def test_longer_distance_costs_more_on_same_date():
 def test_unknown_airport_returns_none():
     provider = SyntheticProvider(AIRPORTS)
     assert provider.get_fare("LIS", "ZZZ", date(2026, 7, 3)) is None
+
+
+def test_summer_costs_more_than_winter():
+    # July (European summer peak) must beat January (winter trough) on the same
+    # route; the seasonality gap (1.25 vs 0.75) dominates the noise band.
+    provider = SyntheticProvider(AIRPORTS)
+    summer = provider.get_fare("LIS", "BCN", date(2026, 7, 15)).price
+    winter = provider.get_fare("LIS", "BCN", date(2026, 1, 15)).price
+    assert summer > winter

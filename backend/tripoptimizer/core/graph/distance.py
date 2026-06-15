@@ -10,4 +10,6 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dlat = rlat2 - rlat1
     dlon = rlon2 - rlon1
     a = sin(dlat / 2) ** 2 + cos(rlat1) * cos(rlat2) * sin(dlon / 2) ** 2
-    return 2 * EARTH_RADIUS_KM * asin(sqrt(a))
+    # clamp to [0, 1]: float rounding can push `a` just past 1.0 on near-antipodal
+    # points, which would make asin() raise a math domain error.
+    return 2 * EARTH_RADIUS_KM * asin(sqrt(min(1.0, a)))

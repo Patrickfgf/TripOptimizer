@@ -1,0 +1,17 @@
+# Internal dossier — never publish (contains private financials marked "interno")
+patrick_perfil_completo.html
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+# Tooling / OS
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.duckdb
+.DS_Store
+Thumbs.db

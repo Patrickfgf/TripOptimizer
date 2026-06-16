@@ -1,5 +1,6 @@
-"""Thin orchestrator: build a fare_lookup from a FareProvider, run an engine."""
+"""Thin orchestrator: build a memoized fare_lookup from a FareProvider, run an engine."""
 
+import functools
 from datetime import date
 
 from tripoptimizer.core.fares.base import FareProvider
@@ -11,6 +12,9 @@ from tripoptimizer.core.optimizer.models import TripRequest, TripResult
 def optimize(
     request: TripRequest, provider: FareProvider, engine: str = "bruteforce"
 ) -> TripResult:
+    # Per-request cache: the same (origin, dest, date) cell recurs across
+    # permutations and offsets; memoizing collapses those to one provider call.
+    @functools.lru_cache(maxsize=None)
     def fare_lookup(origin: str, destination: str, fly_date: date) -> float:
         fare = provider.get_fare(origin, destination, fly_date)
         if fare is None:

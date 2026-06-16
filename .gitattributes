@@ -1,0 +1,11 @@
+# Normalize line endings to LF in the repo and working tree on all platforms.
+# Prevents the "LF will be replaced by CRLF" churn on Windows checkouts and
+# keeps diffs clean across the Python backend and the future React frontend.
+* text=auto eol=lf
+
+# Explicitly binary assets (never normalize / never diff as text).
+*.png binary
+*.jpg binary
+*.ico binary
+*.parquet binary
+*.duckdb binary

@@ -39,3 +39,45 @@ def test_optimize_happy_path() -> None:
     # brute-force returns ranked alternatives, each >= best
     assert len(body["alternatives"]) >= 1
     assert all(alt["total"] >= best["total"] for alt in body["alternatives"])
+
+
+def test_heldkarp_engine_returns_no_alternatives() -> None:
+    response = client.post("/optimize?engine=heldkarp", json=_payload())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["alternatives"] == []
+    assert sorted(body["best"]["order"]) == ["BCN", "CDG", "FCO"]
+
+
+def test_both_engines_agree_on_best_total() -> None:
+    bf = client.post("/optimize?engine=bruteforce", json=_payload()).json()
+    hk = client.post("/optimize?engine=heldkarp", json=_payload()).json()
+    assert abs(bf["best"]["total"] - hk["best"]["total"]) < 1e-6
+
+
+def test_unknown_airport_returns_400() -> None:
+    payload = _payload()
+    payload["origin_airport"] = "ZZZ"
+    response = client.post("/optimize", json=payload)
+    assert response.status_code == 400
+    assert "ZZZ" in response.json()["detail"]
+
+
+def test_too_many_cities_returns_422() -> None:
+    payload = _payload()
+    payload["cities"] = [f"C{i:02d}" for i in range(9)]
+    payload["days_per_city"] = {c: 1 for c in payload["cities"]}
+    response = client.post("/optimize", json=payload)
+    assert response.status_code == 422
+
+
+def test_missing_days_returns_422() -> None:
+    payload = _payload()
+    payload["days_per_city"] = {"BCN": 2, "CDG": 2}  # FCO missing
+    response = client.post("/optimize", json=payload)
+    assert response.status_code == 422
+
+
+def test_invalid_engine_returns_422() -> None:
+    response = client.post("/optimize?engine=astar", json=_payload())
+    assert response.status_code == 422

@@ -1,0 +1,22 @@
+"""Thin orchestrator: build a fare_lookup from a FareProvider, run an engine."""
+
+from datetime import date
+
+from tripoptimizer.core.fares.base import FareProvider
+from tripoptimizer.core.optimizer.bruteforce import search_bruteforce
+from tripoptimizer.core.optimizer.heldkarp import search_heldkarp
+from tripoptimizer.core.optimizer.models import TripRequest, TripResult
+
+
+def optimize(
+    request: TripRequest, provider: FareProvider, engine: str = "bruteforce"
+) -> TripResult:
+    def fare_lookup(origin: str, destination: str, fly_date: date) -> float:
+        fare = provider.get_fare(origin, destination, fly_date)
+        if fare is None:
+            raise KeyError(f"no fare for {origin}->{destination} on {fly_date.isoformat()}")
+        return fare.price
+
+    if engine == "heldkarp":
+        return search_heldkarp(request, fare_lookup)
+    return search_bruteforce(request, fare_lookup)

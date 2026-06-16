@@ -11,7 +11,12 @@ FareLookup = Callable[[str, str, date], float]
 MAX_ALTERNATIVES = 5
 
 
-def _itinerary(order, request, offset, fare_lookup) -> Itinerary:
+def _itinerary(
+    order: tuple[str, ...],
+    request: TripRequest,
+    offset: int,
+    fare_lookup: FareLookup,
+) -> Itinerary:
     legs: list[Leg] = []
     total = 0.0
     for origin, destination, fly_date in build_legs_dates(order, request, offset):

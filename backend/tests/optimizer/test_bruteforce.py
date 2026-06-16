@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from tripoptimizer.core.graph.airports import Airport
 from tripoptimizer.core.fares.synthetic import SyntheticProvider
 from tripoptimizer.core.optimizer.models import TripRequest
@@ -40,3 +42,12 @@ def test_best_is_cheapest_among_alternatives():
     result = optimize(_request(), SyntheticProvider(AIRPORTS), engine="bruteforce")
     for alt in result.alternatives:
         assert result.best.total <= alt.total
+
+
+def test_missing_fare_raises_key_error():
+    class EmptyProvider:
+        def get_fare(self, origin, destination, fly_date):
+            return None
+
+    with pytest.raises(KeyError, match="no fare"):
+        optimize(_request(), EmptyProvider(), engine="bruteforce")

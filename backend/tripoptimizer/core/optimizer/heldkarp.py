@@ -51,11 +51,14 @@ def _best_for_offset(request: TripRequest, fare_lookup: FareLookup, offset: int)
             best_total, best_last = total, last
 
     # reconstruct the order from parent pointers
+    assert best_last != -1, "no complete tour found (unreachable for n >= 1 with complete fares)"
     order_rev: list[str] = []
     mask, last = full, best_last
     while last != -1:
         order_rev.append(cities[last])
-        prev = dp[mask][last][1]
+        state = dp[mask][last]
+        assert state is not None, "DP back-pointer reached an unvisited state"
+        prev = state[1]
         mask ^= 1 << last
         last = prev
     order = tuple(reversed(order_rev))
@@ -68,9 +71,16 @@ def _best_for_offset(request: TripRequest, fare_lookup: FareLookup, offset: int)
 
 
 def search_heldkarp(request: TripRequest, fare_lookup: FareLookup) -> TripResult:
+    """Exact cheapest itinerary via Held-Karp DP.
+
+    Returns only the global optimum; ``alternatives`` is always empty (unlike the
+    brute-force engine, which ranks runners-up). ``flex_days >= 0`` is guaranteed by
+    ``TripRequest`` validation, so the offset loop always runs at least once.
+    """
     best: Itinerary | None = None
     for offset in range(-request.flex_days, request.flex_days + 1):
         candidate = _best_for_offset(request, fare_lookup, offset)
         if best is None or candidate.total < best.total:
             best = candidate
+    assert best is not None  # offset range is non-empty because flex_days >= 0
     return TripResult(best=best, alternatives=())

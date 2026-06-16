@@ -20,8 +20,10 @@ packages = ["tripoptimizer"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# --cov flags need the dev extras (pytest-cov); always run inside the uv venv
-addopts = "-q --cov=tripoptimizer --cov-report=term-missing"
+# --cov flags need the dev extras (pytest-cov); always run inside the uv venv.
+# importlib mode lets test files share a basename across dirs (e.g. graph/ and
+# api/ both have test_airports.py) without needing __init__.py package markers.
+addopts = "-q --cov=tripoptimizer --cov-report=term-missing --import-mode=importlib"
 
 [tool.ruff]
 line-length = 100

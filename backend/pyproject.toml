@@ -6,10 +6,12 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
+    "duckdb>=1.1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5", "httpx>=0.27"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5", "httpx>=0.27", "respx>=0.21"]
+ingest = ["httpx>=0.27", "tenacity>=9.0"]
 
 [build-system]
 requires = ["hatchling"]

@@ -21,6 +21,9 @@ def _airports_csv_path() -> Path:
 
 @functools.lru_cache(maxsize=1)
 def get_airports() -> dict[str, Airport]:
+    """Load airports once per process. The CSV path is resolved on the first call;
+    tests that override ``TRIPOPTIMIZER_AIRPORTS_CSV`` must call
+    ``get_airports.cache_clear()`` first to pick up the new path."""
     return load_airports(_airports_csv_path())
 
 

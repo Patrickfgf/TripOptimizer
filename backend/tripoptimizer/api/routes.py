@@ -45,7 +45,7 @@ def optimize_route(
     codes = {request.origin_airport, request.return_airport, *request.cities}
     unknown = sorted(code for code in codes if code not in airports)
     if unknown:
-        raise HTTPException(status_code=400, detail=f"unknown airport(s): {unknown}")
+        raise HTTPException(status_code=400, detail=f"unknown airport(s): {', '.join(unknown)}")
 
     trip = TripRequest(
         cities=tuple(request.cities),

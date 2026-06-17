@@ -23,7 +23,7 @@ def test_optimize_happy_path() -> None:
     assert response.status_code == 200
     body = response.json()
 
-    assert body["data_source"] == "synthetic"
+    assert body["data_source"] == "synthetic"  # conftest points at an absent snapshot
     assert body["snapshot_date"] is None
 
     best = body["best"]
@@ -31,6 +31,7 @@ def test_optimize_happy_path() -> None:
     assert best["total"] > 0
     # legs form a chain LIS -> ... -> LIS (3 cities => 4 legs)
     assert len(best["legs"]) == 4
+    assert all(leg["source"] == "synthetic" for leg in best["legs"])
     assert best["legs"][0]["origin"] == "LIS"
     assert best["legs"][-1]["destination"] == "LIS"
     # total equals the sum of leg prices (within float tolerance)

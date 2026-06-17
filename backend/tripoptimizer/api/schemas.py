@@ -17,6 +17,12 @@ MAX_CITIES = 8
 MAX_FLEX_DAYS = 7
 
 
+def aggregate_data_source(itinerary: Itinerary) -> str:
+    """cached / synthetic when uniform across legs, else 'mixed'."""
+    sources = {leg.source for leg in itinerary.legs}
+    return next(iter(sources)) if len(sources) == 1 else "mixed"
+
+
 class TripRequestSchema(BaseModel):
     cities: list[str] = Field(..., min_length=1, max_length=MAX_CITIES)
     days_per_city: dict[str, int]
@@ -41,6 +47,7 @@ class LegSchema(BaseModel):
     destination: str
     fly_date: date
     price: float
+    source: str
 
 
 class ItinerarySchema(BaseModel):
@@ -60,6 +67,7 @@ class ItinerarySchema(BaseModel):
                     destination=leg.destination,
                     fly_date=leg.fly_date,
                     price=leg.price,
+                    source=leg.source,
                 )
                 for leg in itinerary.legs
             ],
@@ -78,13 +86,13 @@ class TripResultSchema(BaseModel):
         cls,
         result: TripResult,
         *,
-        data_source: str,
+        data_source: str | None = None,
         snapshot_date: date | None = None,
     ) -> "TripResultSchema":
         return cls(
             best=ItinerarySchema.from_core(result.best),
             alternatives=[ItinerarySchema.from_core(it) for it in result.alternatives],
-            data_source=data_source,
+            data_source=data_source or aggregate_data_source(result.best),
             snapshot_date=snapshot_date,
         )
 

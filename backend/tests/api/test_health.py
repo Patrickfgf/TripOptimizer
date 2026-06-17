@@ -13,6 +13,7 @@ def test_health_ok() -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["airports_loaded"] >= 8
+    assert "snapshot_date" in body  # None when no snapshot committed yet
 
 
 def test_health_degraded_when_reference_data_missing(monkeypatch) -> None:

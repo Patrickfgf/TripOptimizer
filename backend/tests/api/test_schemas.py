@@ -65,18 +65,19 @@ def test_trip_result_from_core_serializes() -> None:
         order=("BCN", "CDG"),
         start_offset=0,
         legs=(
-            Leg("LIS", "BCN", date(2026, 7, 1), 50.0, "synthetic"),
-            Leg("BCN", "CDG", date(2026, 7, 3), 60.0, "synthetic"),
+            Leg("LIS", "BCN", date(2026, 7, 1), 50.0, "cached"),
+            Leg("BCN", "CDG", date(2026, 7, 3), 60.0, "cached"),
             Leg("CDG", "LIS", date(2026, 7, 6), 70.0, "synthetic"),
         ),
         total=180.0,
     )
     core = TripResult(best=best, alternatives=())
-    out = TripResultSchema.from_core(core, data_source="synthetic")
+    out = TripResultSchema.from_core(core)  # data_source auto-derived
 
-    assert out.data_source == "synthetic"
+    assert out.data_source == "mixed"  # cached + synthetic legs
     assert out.snapshot_date is None
     assert out.best.total == 180.0
+    assert out.best.legs[0].source == "cached"
     assert out.best.legs[0].fly_date == date(2026, 7, 1)
     assert out.best.legs[0].price == 50.0
     assert out.alternatives == []

@@ -2,7 +2,11 @@
 
 from fastapi import APIRouter, HTTPException, Query
 
-from tripoptimizer.api.dependencies import get_airports, get_provider
+from tripoptimizer.api.dependencies import (
+    get_airports,
+    get_provider,
+    get_snapshot_date,
+)
 from tripoptimizer.api.schemas import AirportSchema, TripRequestSchema, TripResultSchema
 from tripoptimizer.core.optimizer.models import TripRequest
 from tripoptimizer.core.optimizer.runner import optimize
@@ -12,11 +16,19 @@ router = APIRouter()
 
 @router.get("/health")
 def health() -> dict[str, object]:
-    """Liveness + a shallow check that reference data is available."""
+    """Liveness + deep check: reference data loaded and the snapshot store queryable."""
     airports = get_airports()
     if not airports:
         raise HTTPException(status_code=503, detail="airport reference data unavailable")
-    return {"status": "ok", "airports_loaded": len(airports)}
+    try:
+        snapshot_date = get_snapshot_date()  # touches the DuckDB store (None if no snapshot)
+    except Exception as exc:  # pragma: no cover - defensive
+        raise HTTPException(status_code=503, detail="fare snapshot store unavailable") from exc
+    return {
+        "status": "ok",
+        "airports_loaded": len(airports),
+        "snapshot_date": snapshot_date.isoformat() if snapshot_date else None,
+    }
 
 
 @router.get("/airports", response_model=list[AirportSchema])
@@ -56,4 +68,4 @@ def optimize_route(
         flex_days=request.flex_days,
     )
     result = optimize(trip, get_provider(), engine=engine)
-    return TripResultSchema.from_core(result, data_source="synthetic")
+    return TripResultSchema.from_core(result, snapshot_date=get_snapshot_date())

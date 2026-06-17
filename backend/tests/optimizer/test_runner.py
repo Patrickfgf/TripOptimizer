@@ -38,10 +38,10 @@ def test_optimize_memoizes_repeated_fare_cells() -> None:
 
     seen: set[tuple[str, str, str]] = set()
 
-    def record(origin: str, destination: str, fly_date: date) -> float:
+    def record(origin: str, destination: str, fly_date: date) -> tuple[float, str]:
         seen.add((origin, destination, fly_date.isoformat()))
         naive.get_fare(origin, destination, fly_date)
-        return 100.0
+        return (100.0, "synthetic")
 
     search_bruteforce(request, record)
 

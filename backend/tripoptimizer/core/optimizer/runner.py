@@ -15,11 +15,11 @@ def optimize(
     # Per-request cache: the same (origin, dest, date) cell recurs across
     # permutations and offsets; memoizing collapses those to one provider call.
     @functools.lru_cache(maxsize=None)
-    def fare_lookup(origin: str, destination: str, fly_date: date) -> float:
+    def fare_lookup(origin: str, destination: str, fly_date: date) -> tuple[float, str]:
         fare = provider.get_fare(origin, destination, fly_date)
         if fare is None:
             raise KeyError(f"no fare for {origin}->{destination} on {fly_date.isoformat()}")
-        return fare.price
+        return (fare.price, fare.source)
 
     if engine == "heldkarp":
         return search_heldkarp(request, fare_lookup)

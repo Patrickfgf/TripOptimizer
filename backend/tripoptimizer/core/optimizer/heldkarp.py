@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from tripoptimizer.core.optimizer.models import Itinerary, Leg, TripRequest, TripResult
 from tripoptimizer.core.optimizer.schedule import build_legs_dates
 
-FareLookup = Callable[[str, str, date], float]
+FareLookup = Callable[[str, str, date], tuple[float, str]]
 
 
 def _best_for_offset(request: TripRequest, fare_lookup: FareLookup, offset: int) -> Itinerary:
@@ -20,7 +20,7 @@ def _best_for_offset(request: TripRequest, fare_lookup: FareLookup, offset: int)
     # dp[mask][last] = (cost to be AT `last` having visited exactly `mask`, prev_last)
     dp: list[list[tuple[float, int] | None]] = [[None] * n for _ in range(1 << n)]
     for i, city in enumerate(cities):
-        dp[1 << i][i] = (fare_lookup(request.origin_airport, city, start), -1)
+        dp[1 << i][i] = (fare_lookup(request.origin_airport, city, start)[0], -1)
 
     for mask in range(1 << n):
         days_spent = sum(days[i] for i in range(n) if mask & (1 << i))
@@ -33,7 +33,7 @@ def _best_for_offset(request: TripRequest, fare_lookup: FareLookup, offset: int)
             for nxt in range(n):
                 if mask & (1 << nxt):
                     continue
-                ncost = cost + fare_lookup(cities[last], cities[nxt], fly_date)
+                ncost = cost + fare_lookup(cities[last], cities[nxt], fly_date)[0]
                 nmask = mask | (1 << nxt)
                 current = dp[nmask][nxt]
                 if current is None or ncost < current[0]:
@@ -46,7 +46,7 @@ def _best_for_offset(request: TripRequest, fare_lookup: FareLookup, offset: int)
         state = dp[full][last]
         if state is None:
             continue
-        total = state[0] + fare_lookup(cities[last], request.return_airport, return_date)
+        total = state[0] + fare_lookup(cities[last], request.return_airport, return_date)[0]
         if best_total is None or total < best_total:
             best_total, best_last = total, last
 
@@ -63,10 +63,11 @@ def _best_for_offset(request: TripRequest, fare_lookup: FareLookup, offset: int)
         last = prev
     order = tuple(reversed(order_rev))
 
-    legs = tuple(
-        Leg(o, d, dt, fare_lookup(o, d, dt))
-        for (o, d, dt) in build_legs_dates(order, request, offset)
-    )
+    legs_list: list[Leg] = []
+    for o, d, dt_ in build_legs_dates(order, request, offset):
+        price, source = fare_lookup(o, d, dt_)
+        legs_list.append(Leg(o, d, dt_, price, source))
+    legs = tuple(legs_list)
     return Itinerary(order, offset, legs, sum(leg.price for leg in legs))
 
 

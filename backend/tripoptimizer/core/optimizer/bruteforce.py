@@ -7,7 +7,7 @@ from itertools import permutations
 from tripoptimizer.core.optimizer.models import Itinerary, Leg, TripRequest, TripResult
 from tripoptimizer.core.optimizer.schedule import build_legs_dates
 
-FareLookup = Callable[[str, str, date], float]
+FareLookup = Callable[[str, str, date], tuple[float, str]]
 MAX_ALTERNATIVES = 5
 
 
@@ -20,8 +20,8 @@ def _itinerary(
     legs: list[Leg] = []
     total = 0.0
     for origin, destination, fly_date in build_legs_dates(order, request, offset):
-        price = fare_lookup(origin, destination, fly_date)
-        legs.append(Leg(origin, destination, fly_date, price))
+        price, source = fare_lookup(origin, destination, fly_date)
+        legs.append(Leg(origin, destination, fly_date, price, source))
         total += price
     return Itinerary(tuple(order), offset, tuple(legs), total)
 

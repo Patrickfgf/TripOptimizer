@@ -37,3 +37,16 @@ def test_heldkarp_matches_bruteforce_on_random_cases():
         assert dp.legs[0].origin == "LIS"
         assert dp.legs[-1].destination == "LIS"
         assert set(dp.order) == set(cities)
+
+
+def test_heldkarp_legs_carry_source() -> None:
+    request = TripRequest(
+        cities=("BCN", "FCO"),
+        days_per_city={"BCN": 2, "FCO": 2},
+        origin_airport="LIS",
+        return_airport="LIS",
+        start_date=date(2026, 7, 1),
+        flex_days=1,
+    )
+    result = optimize(request, SyntheticProvider(AIRPORTS), engine="heldkarp")
+    assert all(leg.source == "synthetic" for leg in result.best.legs)

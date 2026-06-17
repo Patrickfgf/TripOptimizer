@@ -51,3 +51,8 @@ def test_missing_fare_raises_key_error():
 
     with pytest.raises(KeyError, match="no fare"):
         optimize(_request(), EmptyProvider(), engine="bruteforce")
+
+
+def test_legs_carry_synthetic_source() -> None:
+    result = optimize(_request(), SyntheticProvider(AIRPORTS), engine="bruteforce")
+    assert all(leg.source == "synthetic" for leg in result.best.legs)

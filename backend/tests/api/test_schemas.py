@@ -65,9 +65,9 @@ def test_trip_result_from_core_serializes() -> None:
         order=("BCN", "CDG"),
         start_offset=0,
         legs=(
-            Leg("LIS", "BCN", date(2026, 7, 1), 50.0),
-            Leg("BCN", "CDG", date(2026, 7, 3), 60.0),
-            Leg("CDG", "LIS", date(2026, 7, 6), 70.0),
+            Leg("LIS", "BCN", date(2026, 7, 1), 50.0, "synthetic"),
+            Leg("BCN", "CDG", date(2026, 7, 3), 60.0, "synthetic"),
+            Leg("CDG", "LIS", date(2026, 7, 6), 70.0, "synthetic"),
         ),
         total=180.0,
     )

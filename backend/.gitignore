@@ -9,3 +9,4 @@ htmlcov/
 *.duckdb
 dist/
 *.egg-info/
+data/raw/

@@ -1,0 +1,12 @@
+:root {
+  --surface: #f6f1e7;
+  --surface-2: #fffdf8;
+  --ink: #1a1410;
+  --muted: #6b6256;
+  --accent: #e08a00;
+  --accent-soft: #fbe9c8;
+  --line: #e7ddc9;
+  --radius: 14px;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}

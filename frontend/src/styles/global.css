@@ -1,0 +1,14 @@
+@import "./tokens.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-display);
+}
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

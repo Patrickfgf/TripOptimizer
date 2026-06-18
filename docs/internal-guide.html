@@ -112,7 +112,7 @@
         <tr><td><b>Plan 1</b> — Core</td><td>Optimizer puro (brute-force + Held-Karp, oráculo DP-vs-brute), grafo de aeroportos, <code>FareProvider</code> + Synthetic</td><td><span class="status done">feito</span></td></tr>
         <tr><td><b>Plan 3</b> — API</td><td>FastAPI: <code>/health</code> (deep), <code>/airports</code>, <code>/optimize</code>; schemas Pydantic</td><td><span class="status done">feito</span></td></tr>
         <tr><td><b>Plan 2</b> — Data layer</td><td>TravelpayoutsProvider (offline), ingestão raw→curated em Parquet/DuckDB, CachedProvider + fallback, proveniência por leg</td><td><span class="status done">feito*</span></td></tr>
-        <tr><td><b>Plan 4</b> — Frontend</td><td>SPA React (form → resultado: mapa, timeline, custo, alternativas), URL compartilhável, CORS no backend, este guia</td><td><span class="status wip">em andamento</span></td></tr>
+        <tr><td><b>Plan 4</b> — Frontend</td><td>SPA React (form → resultado: mapa, timeline, custo, alternativas), URL compartilhável, CORS no backend, este guia</td><td><span class="status done">feito</span></td></tr>
         <tr><td><b>Plan 5</b> — Deploy & docs</td><td>Deploy (Vercel/Render), CI do front, README público</td><td><span class="status next">próximo</span></td></tr>
       </tbody>
     </table>
@@ -163,7 +163,7 @@
   </section>
 
   <section id="frontend">
-    <h2>Frontend — Plan 4 <span class="status wip">em andamento</span></h2>
+    <h2>Frontend — Plan 4 <span class="status done">feito</span></h2>
     <p class="lead">SPA de página única consumindo a API existente. Spec: <code>docs/superpowers/specs/2026-06-18-tripoptimizer-frontend-design.md</code>.</p>
     <div class="grid two" style="margin-top:12px">
       <div class="card">
@@ -191,7 +191,8 @@
     <h2>Changelog / narrativa de dev</h2>
     <p class="lead">Atualizado a cada commit. Entrada mais recente no topo.</p>
     <ul class="timeline changelog" style="margin-top:12px">
-      <li><span class="when">2026-06-18</span><span>Plan 4 iniciado: design do frontend aprovado (brainstorm) → spec escrito; guia interno criado. Próximo: plano de implementação (writing-plans).</span></li>
+      <li><span class="when">2026-06-18</span><span>Plan 4 (frontend) <b>implementado</b>: scaffold Vite (React 18 fixado, Tailwind 3, shadcn escrito à mão) → schemas Zod + API client + URL codec → hooks TanStack Query → form (combobox de aeroportos, cidades+dias, datas) → resultado bento (mapa SVG keyless, timeline com proveniência por leg, custo, alternativas) → wiring com estado compartilhável na URL. CORS configurável no backend. <b>26 testes verdes (14 arquivos), ~97% coverage, 1 E2E Playwright contra o backend real.</b> Falta Plan 5 (deploy + README).</span></li>
+      <li><span class="when">2026-06-18</span><span>Plan 4 iniciado: design do frontend aprovado (brainstorm) → spec escrito; guia interno criado; plano de implementação (writing-plans) com 20 tasks TDD.</span></li>
       <li><span class="when">2026-06-16</span><span>Plan 2 (data layer): ingestão raw→curated, CachedProvider + fallback, proveniência por leg, deep health; snapshot EU committed.</span></li>
       <li><span class="when">2026-06-16</span><span>Plan 3 (API): FastAPI com <code>/health</code>, <code>/airports</code>, <code>/optimize</code> + schemas Pydantic.</span></li>
       <li><span class="when">2026-06-15</span><span>Plan 1 (core) + spec do MVP: optimizer puro com oráculo DP-vs-brute, grafo de aeroportos, FareProvider + Synthetic.</span></li>

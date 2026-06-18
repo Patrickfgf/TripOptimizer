@@ -9,6 +9,13 @@ if (!proto.hasPointerCapture) proto.hasPointerCapture = () => false;
 if (!proto.setPointerCapture) proto.setPointerCapture = () => {};
 if (!proto.releasePointerCapture) proto.releasePointerCapture = () => {};
 
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver = globalThis.ResizeObserver ?? (ResizeObserverMock as unknown as typeof ResizeObserver);
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());

@@ -1,0 +1,147 @@
+# TripOptimizer
+
+**Find the cheapest *order* to visit a set of cities — not just the cheapest flights.**
+
+When you plan a multi-country trip, the cheapest plan is rarely the order you'd guess. The order of the cities changes the date of each flight (days accumulate), and the date changes the price. TripOptimizer searches the city orderings *and* slides the trip within a flexible date window to return the lowest total-cost itinerary, with full per-leg price provenance.
+
+> Built as a portfolio project spanning Data Engineering, Data Science, and Full-Stack — a pure Python optimization core behind a FastAPI service, with a React/TypeScript single-page frontend.
+
+[![CI](https://github.com/Patrickfgf/TripOptimizer/actions/workflows/ci.yml/badge.svg)](https://github.com/Patrickfgf/TripOptimizer/actions/workflows/ci.yml)
+
+<!-- Add the live URLs once deployed -->
+<!-- **Live demo:** frontend (Vercel) · API (Render) -->
+
+---
+
+## How it works
+
+Given a set of cities, days in each, an origin/return airport, and a flexible start date (±N days), the optimizer evaluates every viable city ordering and date offset and returns the cheapest one.
+
+- **Input:** `cities[]`, `days_per_city`, `origin_airport`, `return_airport`, `start_date`, `flex_days`
+- **Output:** the cheapest itinerary `(city order, date offset, per-leg flights, total cost)` + a ranked list of alternatives, each leg labelled with its data source.
+
+**Guardrails:** ≤ 8 cities (keeps the exact search tractable), `flex_days` default ±3 / max ±7, currency fixed to EUR. Flights only in the MVP.
+
+### The algorithm
+
+With fixed days per city, the date of the *k*-th leg depends only on the *set* of cities already visited — so the search collapses to the **Held–Karp** dynamic program over subsets (`O(2ⁿ·n²)`, exact). A brute-force permutation engine doubles as the **test oracle**: every Held–Karp result is checked against brute force, so the fast path can't silently diverge from the correct one.
+
+## Architecture
+
+Monorepo: a pure Python optimization core (no HTTP, no disk) behind a thin FastAPI edge, plus a React frontend. I/O lives only at the boundaries.
+
+```
+TripOptimizer/
+├─ backend/
+│  ├─ tripoptimizer/
+│  │  ├─ core/
+│  │  │  ├─ optimizer/   # cheapest-route search (pure, no I/O) + test oracle
+│  │  │  ├─ fares/       # FareProvider strategy: Travelpayouts | Cached | Synthetic | Fallback
+│  │  │  └─ graph/       # airports/IATA + haversine distance
+│  │  ├─ api/            # FastAPI: /optimize, /airports, /health
+│  │  └─ ingestion/      # offline: Travelpayouts → normalized Parquet snapshot (idempotent CLI)
+│  ├─ data/              # committed fares snapshot (Parquet) + airport reference data
+│  └─ tests/             # pytest — oracle, contract, integration
+├─ frontend/             # React 18 + TS + Vite + Tailwind + shadcn/ui
+├─ render.yaml           # Render blueprint (backend Web Service)
+├─ vercel.json           # Vercel build config (frontend, monorepo)
+└─ docs/                 # design specs + internal dev guide (PT-BR)
+```
+
+### Tech stack
+
+| Layer | Choice |
+|---|---|
+| Core / API | Python 3.12, FastAPI, Pydantic v2 |
+| Data | DuckDB + Parquet (typed, columnar, zero-server) |
+| Flight data | Travelpayouts Data API (cached, offline ingestion) + synthetic fallback |
+| Frontend | React 18, TypeScript, Vite, Tailwind, shadcn/ui |
+| Frontend data/state | TanStack Query, React Hook Form + Zod, URL search-param state |
+| Tests | pytest (backend) · Vitest + RTL + MSW + Playwright (frontend) |
+
+A few deliberate **why-X-not-Y** calls (full rationale in `docs/`):
+
+- **Travelpayouts, not Amadeus/Skyscanner** — Amadeus is decommissioning self-service (2026), Skyscanner is partner-gated; Travelpayouts gives a free token with cheapest-by-date prices.
+- **Committed snapshot, never live-per-request** — a combinatorial search fires `~N²` price lookups; doing that live would burn any quota and break reproducibility. A snapshot keyed by `(origin, destination, date)` fixes both.
+- **Synthetic fallback behind a Strategy interface** — any missing `(A, B, date)` cell falls back to a deterministic synthetic fare, so the public demo never returns empty, and each leg honestly reports `cached` vs `synthetic`.
+
+## API
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness + deep check (reference data loaded, snapshot store queryable) |
+| `GET` | `/airports` | All known airports (IATA, name, city, country, lat/lon) |
+| `POST` | `/optimize?engine=bruteforce\|heldkarp` | Cheapest city ordering + date slide for the trip |
+
+```bash
+curl -X POST localhost:8000/optimize -H 'content-type: application/json' -d '{
+  "cities": ["BCN", "ROM"],
+  "days_per_city": {"BCN": 3, "ROM": 2},
+  "origin_airport": "LIS",
+  "return_airport": "LIS",
+  "start_date": "2026-07-01",
+  "flex_days": 3
+}'
+```
+
+The response carries `best`, ranked `alternatives`, a `data_source` (`cached` / `synthetic` / `mixed`), and the `snapshot_date` so the UI can be honest about where each price came from.
+
+## Local development
+
+Requires [uv](https://docs.astral.sh/uv/) (Python) and Node 18+.
+
+**Backend** (serves on `http://localhost:8000`):
+
+```bash
+cd backend
+uv sync --all-extras
+uv run uvicorn tripoptimizer.api.app:app --reload
+```
+
+**Frontend** (serves on `http://localhost:5173`, proxies `/api` → `:8000` in dev):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` → `frontend/.env` if you need to override defaults. The app runs with **no API key**: it serves the committed snapshot and falls back to synthetic fares.
+
+## Testing
+
+```bash
+# Backend — pytest + coverage + ruff
+cd backend && uv run pytest && uv run ruff check .
+
+# Frontend — typecheck + unit/integration + build, then E2E
+cd frontend && npm run typecheck && npm run test:cov && npm run build && npm run e2e
+```
+
+The Playwright E2E spins up the real backend and frontend (see `frontend/playwright.config.ts`).
+
+## Deployment
+
+Backend → **Render** (`render.yaml`), frontend → **Vercel** (`vercel.json`). Both configs are committed, so the deploy is reproducible. Deploy order matters because the two services reference each other's URLs:
+
+1. **Backend on Render** — New ▸ Blueprint, point it at this repo. Render reads `render.yaml`, builds `backend/` with uv, and starts `uvicorn … --host 0.0.0.0 --port $PORT`. Note the service URL (e.g. `https://tripoptimizer-api.onrender.com`).
+2. **Frontend on Vercel** — Import the repo. Vercel reads `vercel.json` (root). Set env var **`VITE_API_BASE_URL`** to the Render URL from step 1. Deploy and note the Vercel URL.
+3. **Close the loop** — back on Render, set **`FRONTEND_ORIGINS`** to the exact Vercel URL and redeploy. Without this, the live frontend is blocked by CORS (the backend logs a startup warning when it's unset).
+
+## Data & provenance
+
+The committed snapshot covers a bounded window of European routes; trips that fall outside the cached `(origin, destination, date)` cells are served deterministic synthetic fares, and every leg is labelled accordingly. Regenerate the snapshot from live data (needs a free Travelpayouts token in `backend/.env`):
+
+```bash
+cd backend
+uv run python -m tripoptimizer.ingestion.build_snapshot \
+  --airports LIS OPO MAD BCN CDG FCO BER ATH --start 2026-07-01 --days 30
+```
+
+## Roadmap
+
+MVP is flights-only route optimization. Post-MVP: buses/trains as additional legs, and nearby-city recommendations (suggest detours that lower total cost).
+
+---
+
+*Internal dev narrative (PT-BR), design specs, and the full decision log live in [`docs/`](docs/).*

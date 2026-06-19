@@ -65,7 +65,7 @@
     <h1>TripOptimizer</h1>
     <p>Otimizador da <strong>ordem mais barata</strong> de uma viagem multi-cidade: dado um conjunto de destinos, dias em cada, aeroporto de saída/retorno e uma janela de datas flexível, computa a sequência de voos de menor custo total — porque a ordem muda as datas e as datas mudam o preço.</p>
     <div class="meta">
-      <span class="pill">Python 3.11+ · FastAPI</span>
+      <span class="pill">Python 3.12 · FastAPI</span>
       <span class="pill">DuckDB · Parquet</span>
       <span class="pill">React 18 · TS · Vite</span>
       <span class="pill">EUR · Europa (sample)</span>
@@ -82,6 +82,7 @@
     <a href="#decisoes">Decisões (why-X-not-Y)</a>
     <a href="#dados">Dados</a>
     <a href="#frontend">Frontend (Plan 4)</a>
+    <a href="#deploy">Deploy (Plan 5)</a>
     <a href="#changelog">Changelog</a>
   </div>
 </nav>
@@ -113,10 +114,10 @@
         <tr><td><b>Plan 3</b> — API</td><td>FastAPI: <code>/health</code> (deep), <code>/airports</code>, <code>/optimize</code>; schemas Pydantic</td><td><span class="status done">feito</span></td></tr>
         <tr><td><b>Plan 2</b> — Data layer</td><td>TravelpayoutsProvider (offline), ingestão raw→curated em Parquet/DuckDB, CachedProvider + fallback, proveniência por leg</td><td><span class="status done">feito*</span></td></tr>
         <tr><td><b>Plan 4</b> — Frontend</td><td>SPA React (form → resultado: mapa, timeline, custo, alternativas), URL compartilhável, CORS no backend, este guia</td><td><span class="status done">feito</span></td></tr>
-        <tr><td><b>Plan 5</b> — Deploy & docs</td><td>Deploy (Vercel/Render), CI do front, README público</td><td><span class="status next">próximo</span></td></tr>
+        <tr><td><b>Plan 5</b> — Deploy & docs</td><td>Blueprints Render + Vercel, CI (GitHub Actions: backend+front+e2e), README público (EN), pin de Python 3.12, snapshot ampliado</td><td><span class="status wip">em andamento</span></td></tr>
       </tbody>
     </table>
-    <p class="lead" style="margin-top:10px">* Plan 2 completo exceto a Task 9 (pull real do Travelpayouts), gated no token de acesso. O demo serve do snapshot committed + fallback sintético — roda sem key.</p>
+    <p class="lead" style="margin-top:10px">* Plan 2 completo, <b>incluindo a Task 9</b> (pull real do Travelpayouts já ingerido no snapshot committed). O demo serve do snapshot + fallback sintético — roda sem key.</p>
   </section>
 
   <section id="arquitetura">
@@ -187,10 +188,35 @@
     <div class="why"><b>Mudança no backend:</b> adicionar <code>CORSMiddleware</code> em <code>api/app.py</code> (origins por env). Único toque no backend nesta fase.</div>
   </section>
 
+  <section id="deploy">
+    <h2>Deploy &amp; ops — Plan 5 <span class="status wip">em andamento</span></h2>
+    <p class="lead">O que era convenção implícita na máquina (porta 8000, <code>python</code> local, front falando com <code>localhost</code>) virou config versionada e reproduzível. Saiu de uma revisão pré-deploy multi-agente adversarial que separou bloqueadores reais de ruído.</p>
+    <div class="grid two" style="margin-top:12px">
+      <div class="card">
+        <h3>Infra como código</h3>
+        <ul style="margin:6px 0 0;padding-left:18px">
+          <li><code>render.yaml</code> — backend no Render: <code>rootDir backend</code>, build <code>uv sync --frozen</code>, start <code>uvicorn --host 0.0.0.0 --port $PORT</code>, health <code>/health</code>.</li>
+          <li><code>vercel.json</code> — front no Vercel (monorepo: build via <code>npm --prefix frontend</code>, output <code>frontend/dist</code>).</li>
+          <li><code>.python-version</code> = 3.12 — remove o drift dev↔prod; garante wheel pré-compilada de duckdb.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Contrato de ambiente + CI</h3>
+        <ul style="margin:6px 0 0;padding-left:18px">
+          <li><code>FRONTEND_ORIGINS</code> (Render) = URL do Vercel; <code>VITE_API_BASE_URL</code> (Vercel) = URL do Render.</li>
+          <li>App loga warning no startup se <code>FRONTEND_ORIGINS</code> ausente (mitiga o modo de falha nº1).</li>
+          <li>CI GitHub Actions: jobs <code>backend</code> (ruff+pytest), <code>frontend</code> (typecheck+test+build), <code>e2e</code> (Playwright vs backend real).</li>
+        </ul>
+      </div>
+    </div>
+    <div class="why"><b>Modo de falha nº1:</b> "backend verde, front morto" — o serviço sobe e <code>/health</code> responde, mas o navegador é bloqueado por CORS porque <code>FRONTEND_ORIGINS</code> ficou no default <code>localhost</code>. Runbook em ordem: backend → front → fecha o loop (setar <code>FRONTEND_ORIGINS</code> e redeploy).</div>
+  </section>
+
   <section id="changelog">
     <h2>Changelog / narrativa de dev</h2>
     <p class="lead">Atualizado a cada commit. Entrada mais recente no topo.</p>
     <ul class="timeline changelog" style="margin-top:12px">
+      <li><span class="when">2026-06-19</span><span><b>Plan 5 (deploy &amp; docs) iniciado.</b> Revisão pré-deploy multi-agente (adversarial) separou bloqueadores de ruído. <b>Bloco A:</b> <code>render.yaml</code> + <code>vercel.json</code> + <code>.python-version</code> 3.12 + <code>FRONTEND_ORIGINS</code> documentado + warning de startup no CORS (TDD — <b>68 testes verdes, 99% cov</b>). <b>Bloco B:</b> README público (EN) na raiz + frontend README reescrito + este guia. <b>Bloco C:</b> CI GitHub Actions (backend+front+e2e). <b>Bloco D:</b> snapshot ampliado (janela de 30 dias) via Travelpayouts.</span></li>
       <li><span class="when">2026-06-18</span><span>Plan 4 (frontend) <b>implementado</b>: scaffold Vite (React 18 fixado, Tailwind 3, shadcn escrito à mão) → schemas Zod + API client + URL codec → hooks TanStack Query → form (combobox de aeroportos, cidades+dias, datas) → resultado bento (mapa SVG keyless, timeline com proveniência por leg, custo, alternativas) → wiring com estado compartilhável na URL. CORS configurável no backend. <b>26 testes verdes (14 arquivos), ~97% coverage, 1 E2E Playwright contra o backend real.</b> Falta Plan 5 (deploy + README).</span></li>
       <li><span class="when">2026-06-18</span><span>Plan 4 iniciado: design do frontend aprovado (brainstorm) → spec escrito; guia interno criado; plano de implementação (writing-plans) com 20 tasks TDD.</span></li>
       <li><span class="when">2026-06-16</span><span>Plan 2 (data layer): ingestão raw→curated, CachedProvider + fallback, proveniência por leg, deep health; snapshot EU committed.</span></li>
@@ -203,7 +229,7 @@
 
 <footer>
   <div class="wrap">
-    TripOptimizer · guia interno (PT-BR) · documento vivo — atualizar a cada commit. Doc público (README) é entrega do Plan 5.
+    TripOptimizer · guia interno (PT-BR) · documento vivo — atualizar a cada commit. Doc público: <code>README.md</code> (raiz, EN) entregue no Plan 5.
   </div>
 </footer>
 

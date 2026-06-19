@@ -1,73 +1,34 @@
-# React + TypeScript + Vite
+# TripOptimizer — frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 18 + TypeScript + Vite single-page UI for [TripOptimizer](../README.md). It consumes the FastAPI backend and renders the cheapest itinerary: a route map, an itinerary timeline with per-leg price provenance, a cost summary, and ranked alternatives. Trip state is encoded in the URL search params, so any result is shareable.
 
-Currently, two official plugins are available:
+See the [root README](../README.md) for the project overview, architecture, and deployment.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Develop
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev        # http://localhost:5173 — proxies /api → http://localhost:8000 in dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Run the backend separately (`cd ../backend && uv run uvicorn tripoptimizer.api.app:app --reload`).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Scripts
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+| Script | Does |
+|---|---|
+| `npm run dev` | Vite dev server with HMR |
+| `npm run build` | Type-check (`tsc --noEmit`) + production build to `dist/` |
+| `npm run typecheck` | Type-check only |
+| `npm run test` / `test:cov` | Vitest (RTL + MSW), optionally with coverage |
+| `npm run e2e` | Playwright E2E (boots backend + frontend automatically) |
+
+## Configuration
+
+`VITE_API_BASE_URL` — base URL of the API. Empty (default) uses the Vite dev proxy (`/api`); in production set it to the deployed backend origin. See `.env.example`.
+
+## Stack
+
+- **Data/state:** TanStack Query (server state), React Hook Form + Zod (form validation mirroring the backend's Pydantic contract), URL search params (shareable trip state)
+- **UI:** Tailwind + hand-written shadcn/ui primitives, `react-simple-maps` for the keyless SVG map
+- **Design direction:** Warm Bento / Editorial (cream + amber, display type, tabular mono)

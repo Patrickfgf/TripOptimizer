@@ -1,5 +1,6 @@
 """FastAPI application assembly."""
 
+import logging
 import os
 
 from fastapi import FastAPI
@@ -9,6 +10,8 @@ from tripoptimizer.api.routes import router
 
 DEFAULT_ORIGINS = "http://localhost:5173"
 
+logger = logging.getLogger("tripoptimizer.api")
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -16,7 +19,14 @@ def create_app() -> FastAPI:
         version="0.1.0",
         description="Cheapest multi-city trip-ordering optimizer.",
     )
-    origins = [o.strip() for o in os.getenv("FRONTEND_ORIGINS", DEFAULT_ORIGINS).split(",") if o.strip()]
+    raw_origins = os.getenv("FRONTEND_ORIGINS")
+    if raw_origins is None:
+        logger.warning(
+            "FRONTEND_ORIGINS is not set; CORS allows only %s. "
+            "Set it to your deployed frontend origin in production.",
+            DEFAULT_ORIGINS,
+        )
+    origins = [o.strip() for o in (raw_origins or DEFAULT_ORIGINS).split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,

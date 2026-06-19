@@ -1,0 +1,25 @@
+# Render Blueprint — TripOptimizer backend (FastAPI Web Service).
+# The frontend deploys separately on Vercel (see ./vercel.json).
+# Spec: https://render.com/docs/blueprint-spec
+#
+# One-time setup: New > Blueprint, point Render at this repo. Render reads this
+# file, provisions the service, and asks you to fill the `sync: false` vars below.
+services:
+  - type: web
+    name: tripoptimizer-api
+    runtime: python
+    plan: free
+    rootDir: backend # pyproject.toml, uv.lock, data/ and .python-version live here
+    # uv reads .python-version + uv.lock; --frozen aborts the build if the lock drifts.
+    buildCommand: "pip install uv && uv sync --frozen"
+    # Render injects $PORT and probes for an open port; bind 0.0.0.0 or the deploy
+    # is marked unreachable. Never hardcode 8000 here.
+    startCommand: "uv run uvicorn tripoptimizer.api.app:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # REQUIRED. Comma-separated allowlist of browser origins for CORS.
+      # Set to your exact Vercel production URL, e.g. https://tripoptimizer.vercel.app
+      # If unset, CORS defaults to http://localhost:5173 and the live frontend is blocked.
+      - key: FRONTEND_ORIGINS
+        sync: false

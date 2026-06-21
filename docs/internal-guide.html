@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TripOptimizer — Guia Interno do Projeto</title>
+<style>
+  :root{
+    --surface:#f6f1e7; --surface-2:#fffdf8; --ink:#1a1410; --muted:#6b6256;
+    --accent:#e08a00; --accent-soft:#fbe9c8; --line:#e7ddc9; --teal:#0f766e;
+    --radius:14px; --maxw:1000px;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --display:"Segoe UI",-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--surface);color:var(--ink);font-family:var(--display);line-height:1.65;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  header.hero{background:var(--ink);color:var(--surface);padding:56px 0 48px}
+  header.hero .wrap{display:flex;flex-direction:column;gap:14px}
+  .eyebrow{font-family:var(--mono);font-size:.8rem;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:clamp(2.2rem,1.2rem+4vw,3.6rem);line-height:1.02;letter-spacing:-.03em;margin:0;font-weight:800}
+  header.hero p{max-width:62ch;color:#e8dfce;margin:6px 0 0}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .pill{font-family:var(--mono);font-size:.78rem;background:#2a221a;color:#f0e7d6;border:1px solid #3a3026;padding:5px 11px;border-radius:999px}
+  main{padding:48px 0 80px}
+  section{margin:0 0 40px;scroll-margin-top:20px}
+  h2{font-size:1.5rem;letter-spacing:-.02em;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+  h2::before{content:"";width:10px;height:22px;background:var(--accent);border-radius:3px;display:inline-block}
+  h3{font-size:1.05rem;margin:22px 0 6px}
+  p,li{color:#2b2419}
+  .lead{color:var(--muted)}
+  .card{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);padding:20px 22px}
+  .grid{display:grid;gap:16px}
+  .grid.two{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  .grid.three{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  code,.mono{font-family:var(--mono);font-size:.86em}
+  .card code{background:var(--accent-soft);padding:1px 6px;border-radius:5px}
+  table{width:100%;border-collapse:collapse;font-size:.93rem;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#efe6d4;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:#5a5142}
+  tr:last-child td{border-bottom:none}
+  .status{font-family:var(--mono);font-size:.74rem;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .done{background:#dff3e6;color:#0f7a44}
+  .wip{background:var(--accent-soft);color:#9a5b00}
+  .next{background:#e6eef7;color:#26517d}
+  .timeline{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:2px}
+  .timeline li{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}
+  .timeline li:last-child{border-bottom:none}
+  .timeline .when{font-family:var(--mono);font-size:.8rem;color:var(--muted);min-width:92px}
+  .why{border-left:3px solid var(--teal);background:#f0f7f5;padding:10px 14px;border-radius:0 8px 8px 0;margin:8px 0;font-size:.93rem}
+  .why b{color:var(--teal)}
+  nav.toc{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--line);z-index:5;padding:10px 0}
+  nav.toc .wrap{display:flex;gap:18px;flex-wrap:wrap;font-family:var(--mono);font-size:.82rem}
+  nav.toc a{color:var(--muted);text-decoration:none}
+  nav.toc a:hover{color:var(--accent)}
+  footer{border-top:1px solid var(--line);padding:24px 0;color:var(--muted);font-size:.85rem}
+  .changelog li{margin-bottom:4px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Guia Interno · documento vivo (atualizado a cada commit)</span>
+    <h1>TripOptimizer</h1>
+    <p>Otimizador da <strong>ordem mais barata</strong> de uma viagem multi-cidade: dado um conjunto de destinos, dias em cada, aeroporto de saída/retorno e uma janela de datas flexível, computa a sequência de voos de menor custo total — porque a ordem muda as datas e as datas mudam o preço.</p>
+    <div class="meta">
+      <span class="pill">Python 3.12 · FastAPI</span>
+      <span class="pill">DuckDB · Parquet</span>
+      <span class="pill">React 18 · TS · Vite</span>
+      <span class="pill">EUR · Europa (sample)</span>
+      <span class="pill">Projeto de portfólio (DA · DS · DE · Full-Stack)</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#visao">Visão</a>
+    <a href="#status">Status</a>
+    <a href="#arquitetura">Arquitetura</a>
+    <a href="#decisoes">Decisões (why-X-not-Y)</a>
+    <a href="#dados">Dados</a>
+    <a href="#frontend">Frontend (Plan 4)</a>
+    <a href="#deploy">Deploy (Plan 5)</a>
+    <a href="#changelog">Changelog</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <section id="visao">
+    <h2>Visão geral</h2>
+    <p class="lead">Ao planejar uma viagem por vários países, o plano mais barato raramente é a ordem que você imagina primeiro. A ordem das cidades muda a data de cada voo (os dias acumulam), e a data muda o preço. O viajante acaba re-checando manualmente cada permutação da rota <em>e</em> cada variação de data — exatamente a dor vivida no Erasmus em Portugal (15 países).</p>
+    <div class="grid two" style="margin-top:16px">
+      <div class="card">
+        <h3>Input</h3>
+        <p><code>cities[]</code>, <code>days_per_city</code>, <code>origin_airport</code>, <code>return_airport</code>, <code>start_date</code>, <code>flex_days</code> (±N).</p>
+      </div>
+      <div class="card">
+        <h3>Output</h3>
+        <p>Itinerário mais barato = melhor <code>(ordem das cidades, offset de data, voos por leg, custo total)</code> + lista ranqueada de alternativas.</p>
+      </div>
+    </div>
+    <div class="why"><b>Guardrails:</b> máx. 8 cidades (n! tratável / Held-Karp 2ⁿ·n² exato), <code>flex_days</code> default ±3 (cap ±7), moeda fixa em EUR. Voos apenas no MVP.</div>
+  </section>
+
+  <section id="status">
+    <h2>Status atual</h2>
+    <table>
+      <thead><tr><th>Plano</th><th>Escopo</th><th>Estado</th></tr></thead>
+      <tbody>
+        <tr><td><b>Plan 1</b> — Core</td><td>Optimizer puro (brute-force + Held-Karp, oráculo DP-vs-brute), grafo de aeroportos, <code>FareProvider</code> + Synthetic</td><td><span class="status done">feito</span></td></tr>
+        <tr><td><b>Plan 3</b> — API</td><td>FastAPI: <code>/health</code> (deep), <code>/airports</code>, <code>/optimize</code>; schemas Pydantic</td><td><span class="status done">feito</span></td></tr>
+        <tr><td><b>Plan 2</b> — Data layer</td><td>TravelpayoutsProvider (offline), ingestão raw→curated em Parquet/DuckDB, CachedProvider + fallback, proveniência por leg</td><td><span class="status done">feito*</span></td></tr>
+        <tr><td><b>Plan 4</b> — Frontend</td><td>SPA React (form → resultado: mapa, timeline, custo, alternativas), URL compartilhável, CORS no backend, este guia</td><td><span class="status done">feito</span></td></tr>
+        <tr><td><b>Plan 5</b> — Deploy & docs</td><td>Blueprints Render + Vercel, CI (GitHub Actions: backend+front+e2e), README público (EN), pin de Python 3.12, snapshot ampliado</td><td><span class="status wip">em andamento</span></td></tr>
+      </tbody>
+    </table>
+    <p class="lead" style="margin-top:10px">* Plan 2 completo, <b>incluindo a Task 9</b> (pull real do Travelpayouts já ingerido no snapshot committed). O demo serve do snapshot + fallback sintético — roda sem key.</p>
+  </section>
+
+  <section id="arquitetura">
+    <h2>Arquitetura</h2>
+    <p>Monorepo, core Python puro + borda React. I/O nas bordas; o core não conhece HTTP nem disco.</p>
+    <div class="card" style="margin-top:12px">
+<pre class="mono" style="margin:0;white-space:pre-wrap;font-size:.82rem;line-height:1.5">tripoptimizer/
+├─ backend/
+│  ├─ core/
+│  │  ├─ optimizer/   # busca da rota mais barata (puro, sem I/O)
+│  │  ├─ fares/       # FareProvider: Travelpayouts | Cached | Synthetic | Fallback
+│  │  └─ graph/       # aeroportos/IATA (OurAirports) + haversine
+│  ├─ api/            # FastAPI: /optimize, /airports, /health
+│  ├─ ingestion/      # offline: Travelpayouts → snapshot normalizado (CLI idempotente)
+│  └─ tests/          # pytest (oráculo DP-vs-brute, contract tests, integração httpx)
+├─ frontend/          # React 18 + TS + Vite + Tailwind + shadcn/ui   ← Plan 4
+├─ data/              # snapshot committed (Parquet) + grafo de aeroportos
+└─ docs/              # specs + este guia interno (HTML) + README (Plan 5)</pre>
+    </div>
+  </section>
+
+  <section id="decisoes">
+    <h2>Decisões (why-X-not-Y)</h2>
+    <table>
+      <thead><tr><th>Decisão</th><th>Escolha</th><th>Por que não a alternativa</th></tr></thead>
+      <tbody>
+        <tr><td>Stack</td><td>Python core (FastAPI + DuckDB) + React/TS</td><td>Cobre DE+DS+DA+Full-Stack num projeto só. Descartado TS/Supabase-Edge puro (sub-usa o stack de dados) e Streamlit-only (perde o sinal full-stack).</td></tr>
+        <tr><td>Fonte de fares</td><td>Travelpayouts (cache real) + fallback sintético</td><td>Token grátis e instantâneo; tem cheapest-by-date. Amadeus está descomissionando o self-service (jul/2026); Skyscanner é partner-gated; Kiwi fechou o self-service; Duffel só dá dado sintético no sandbox.</td></tr>
+        <tr><td>Reprodutibilidade</td><td>Snapshot committed, nunca live-per-request</td><td>Busca combinatória (~N² lookups) queima qualquer quota e quebra a reprodutibilidade. Snapshot + cache por <code>(origin,dest,date)</code> resolve.</td></tr>
+        <tr><td>Algoritmo</td><td>Brute-force (MVP) + Held-Karp (DP sobre subconjuntos)</td><td>Dias fixos ⇒ a data do k-ésimo leg depende só do <em>conjunto</em> já visitado ⇒ DP 2ⁿ·n² exato. Brute-force é também o oráculo de teste.</td></tr>
+        <tr><td>Frontend (Plan 4)</td><td>Página única + estado na URL · Warm Bento · mapa SVG keyless</td><td>Router/wizard são scaffolding demais p/ fluxo único. Dark mode é o look "esperado". Mapa por tiles quebra o "roda sem API key".</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="dados">
+    <h2>Camada de dados</h2>
+    <p>Grão da linha de fare: <span class="mono">1 linha = origin × destination × date × fare</span>. Persistido em Parquet (tipado, colunar), consultado via DuckDB.</p>
+    <div class="grid three" style="margin-top:12px">
+      <div class="card"><h3>raw → curated</h3><p>Ingestão idempotente: raw read-only → snapshot curado. Re-rodar = mesmo resultado.</p></div>
+      <div class="card"><h3>Proveniência por leg</h3><p><code>Leg.source</code> propaga do provider vencedor até a API; <code>data_source</code> agrega (<code>cached</code>/<code>synthetic</code>/<code>mixed</code>).</p></div>
+      <div class="card"><h3>Fallback gracioso</h3><p>Célula <code>(A,B,date)</code> faltante → fare sintético determinístico. O demo nunca retorna vazio.</p></div>
+    </div>
+  </section>
+
+  <section id="frontend">
+    <h2>Frontend — Plan 4 <span class="status done">feito</span></h2>
+    <p class="lead">SPA de página única consumindo a API existente. Spec: <code>docs/superpowers/specs/2026-06-18-tripoptimizer-frontend-design.md</code>.</p>
+    <div class="grid two" style="margin-top:12px">
+      <div class="card">
+        <h3>Stack & padrões</h3>
+        <ul style="margin:6px 0 0;padding-left:18px">
+          <li>React 18 + TS + Vite + Tailwind + shadcn/ui</li>
+          <li>TanStack Query (server state), RHF + Zod (form + validação espelhando Pydantic)</li>
+          <li>react-simple-maps (mapa SVG keyless)</li>
+          <li>Vitest + RTL + MSW · 1 E2E Playwright</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Telas / componentes</h3>
+        <ul style="margin:6px 0 0;padding-left:18px">
+          <li><b>Form:</b> AirportCombobox, CityList (dias + reorder), DateFlexControls</li>
+          <li><b>Resultado (bento):</b> RouteMap, ItineraryTimeline, CostSummary, Alternatives</li>
+          <li>Proveniência de dado como elemento visual de 1ª classe</li>
+        </ul>
+      </div>
+    </div>
+    <div class="why"><b>Mudança no backend:</b> adicionar <code>CORSMiddleware</code> em <code>api/app.py</code> (origins por env). Único toque no backend nesta fase.</div>
+  </section>
+
+  <section id="deploy">
+    <h2>Deploy &amp; ops — Plan 5 <span class="status wip">em andamento</span></h2>
+    <p class="lead">O que era convenção implícita na máquina (porta 8000, <code>python</code> local, front falando com <code>localhost</code>) virou config versionada e reproduzível. Saiu de uma revisão pré-deploy multi-agente adversarial que separou bloqueadores reais de ruído.</p>
+    <div class="grid two" style="margin-top:12px">
+      <div class="card">
+        <h3>Infra como código</h3>
+        <ul style="margin:6px 0 0;padding-left:18px">
+          <li><code>render.yaml</code> — backend no Render: <code>rootDir backend</code>, build <code>uv sync --frozen</code>, start <code>uvicorn --host 0.0.0.0 --port $PORT</code>, health <code>/health</code>.</li>
+          <li><code>vercel.json</code> — front no Vercel (monorepo: build via <code>npm --prefix frontend</code>, output <code>frontend/dist</code>).</li>
+          <li><code>.python-version</code> = 3.12 — remove o drift dev↔prod; garante wheel pré-compilada de duckdb.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Contrato de ambiente + CI</h3>
+        <ul style="margin:6px 0 0;padding-left:18px">
+          <li><code>FRONTEND_ORIGINS</code> (Render) = URL do Vercel; <code>VITE_API_BASE_URL</code> (Vercel) = URL do Render.</li>
+          <li>App loga warning no startup se <code>FRONTEND_ORIGINS</code> ausente (mitiga o modo de falha nº1).</li>
+          <li>CI GitHub Actions: jobs <code>backend</code> (ruff+pytest), <code>frontend</code> (typecheck+test+build), <code>e2e</code> (Playwright vs backend real).</li>
+        </ul>
+      </div>
+    </div>
+    <div class="why"><b>Modo de falha nº1:</b> "backend verde, front morto" — o serviço sobe e <code>/health</code> responde, mas o navegador é bloqueado por CORS porque <code>FRONTEND_ORIGINS</code> ficou no default <code>localhost</code>. Runbook em ordem: backend → front → fecha o loop (setar <code>FRONTEND_ORIGINS</code> e redeploy).</div>
+  </section>
+
+  <section id="changelog">
+    <h2>Changelog / narrativa de dev</h2>
+    <p class="lead">Atualizado a cada commit. Entrada mais recente no topo.</p>
+    <ul class="timeline changelog" style="margin-top:12px">
+      <li><span class="when">2026-06-19</span><span><b>Plan 5 (deploy &amp; docs) iniciado.</b> Revisão pré-deploy multi-agente (adversarial) separou bloqueadores de ruído. <b>Bloco A:</b> <code>render.yaml</code> + <code>vercel.json</code> + <code>.python-version</code> 3.12 + <code>FRONTEND_ORIGINS</code> documentado + warning de startup no CORS (TDD — <b>68 testes verdes, 99% cov</b>). <b>Bloco B:</b> README público (EN) na raiz + frontend README reescrito + este guia. <b>Bloco C:</b> CI GitHub Actions (backend+front+e2e). <b>Bloco D:</b> snapshot ampliado (janela de 30 dias) via Travelpayouts.</span></li>
+      <li><span class="when">2026-06-18</span><span>Plan 4 (frontend) <b>implementado</b>: scaffold Vite (React 18 fixado, Tailwind 3, shadcn escrito à mão) → schemas Zod + API client + URL codec → hooks TanStack Query → form (combobox de aeroportos, cidades+dias, datas) → resultado bento (mapa SVG keyless, timeline com proveniência por leg, custo, alternativas) → wiring com estado compartilhável na URL. CORS configurável no backend. <b>26 testes verdes (14 arquivos), ~97% coverage, 1 E2E Playwright contra o backend real.</b> Falta Plan 5 (deploy + README).</span></li>
+      <li><span class="when">2026-06-18</span><span>Plan 4 iniciado: design do frontend aprovado (brainstorm) → spec escrito; guia interno criado; plano de implementação (writing-plans) com 20 tasks TDD.</span></li>
+      <li><span class="when">2026-06-16</span><span>Plan 2 (data layer): ingestão raw→curated, CachedProvider + fallback, proveniência por leg, deep health; snapshot EU committed.</span></li>
+      <li><span class="when">2026-06-16</span><span>Plan 3 (API): FastAPI com <code>/health</code>, <code>/airports</code>, <code>/optimize</code> + schemas Pydantic.</span></li>
+      <li><span class="when">2026-06-15</span><span>Plan 1 (core) + spec do MVP: optimizer puro com oráculo DP-vs-brute, grafo de aeroportos, FareProvider + Synthetic.</span></li>
+    </ul>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    TripOptimizer · guia interno (PT-BR) · documento vivo — atualizar a cada commit. Doc público: <code>README.md</code> (raiz, EN) entregue no Plan 5.
+  </div>
+</footer>
+
+</body>
+</html>

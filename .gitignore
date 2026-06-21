@@ -15,3 +15,11 @@ htmlcov/
 *.duckdb
 .DS_Store
 Thumbs.db
+
+# Brainstorming visual companion
+.superpowers/
+
+# Editor / local dev artifacts
+.vscode/
+.playwright-mcp/
+tripoptimizer-result.png

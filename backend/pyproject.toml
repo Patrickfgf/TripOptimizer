@@ -1,0 +1,32 @@
+[project]
+name = "tripoptimizer"
+version = "0.1.0"
+description = "Cheapest multi-city trip-ordering optimizer"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "duckdb>=1.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.5", "httpx>=0.27", "respx>=0.21"]
+ingest = ["httpx>=0.27", "tenacity>=9.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["tripoptimizer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# --cov flags need the dev extras (pytest-cov); always run inside the uv venv.
+# importlib mode lets test files share a basename across dirs (e.g. graph/ and
+# api/ both have test_airports.py) without needing __init__.py package markers.
+addopts = "-q --cov=tripoptimizer --cov-report=term-missing --import-mode=importlib"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

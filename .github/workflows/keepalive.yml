@@ -1,0 +1,22 @@
+name: keep-alive
+
+# Pings the Render free-tier backend so visitors don't hit a ~30-60s cold start.
+# Render free instances sleep after ~15 min idle; we ping every 10 min to keep it warm.
+# Trade-off: keeping it awake ~24/7 consumes most of Render's monthly free instance-hours.
+# To save hours, widen the cron interval or restrict it to likely-visit hours.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: |
+          curl -sS --fail --max-time 90 --retry 3 --retry-delay 10 \
+            https://tripoptimizer-api.onrender.com/health

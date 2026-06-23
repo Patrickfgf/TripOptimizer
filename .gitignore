@@ -23,3 +23,7 @@ Thumbs.db
 .vscode/
 .playwright-mcp/
 tripoptimizer-result.png
+
+# Local-only: screenshots & personal CV dossier (not part of the public project)
+Captura de tela*.png
+tripoptimizer-cv-dossier.html

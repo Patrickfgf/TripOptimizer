@@ -8,8 +8,9 @@ When you plan a multi-country trip, the cheapest plan is rarely the order you'd 
 
 [![CI](https://github.com/Patrickfgf/TripOptimizer/actions/workflows/ci.yml/badge.svg)](https://github.com/Patrickfgf/TripOptimizer/actions/workflows/ci.yml)
 
-<!-- Add the live URLs once deployed -->
-<!-- **Live demo:** frontend (Vercel) · API (Render) -->
+**🔗 Live demo: [tripoptimizer-rouge.vercel.app](https://tripoptimizer-rouge.vercel.app)** — runs in your browser, no API key needed. · API health: [`/health`](https://tripoptimizer-api.onrender.com/health)
+
+> ℹ️ The backend is on Render's free tier and sleeps after ~15 min idle, so the first request after a while can take ~30–60 s to wake.
 
 ---
 
@@ -56,7 +57,7 @@ TripOptimizer/
 | Data | DuckDB + Parquet (typed, columnar, zero-server) |
 | Flight data | Travelpayouts Data API (cached, offline ingestion) + synthetic fallback |
 | Frontend | React 18, TypeScript, Vite, Tailwind, shadcn/ui |
-| Frontend data/state | TanStack Query, React Hook Form + Zod, URL search-param state |
+| Frontend data/state | TanStack Query, Zod (controlled inputs + parsing), URL search-param state |
 | Tests | pytest (backend) · Vitest + RTL + MSW + Playwright (frontend) |
 
 A few deliberate **why-X-not-Y** calls (full rationale in `docs/`):
@@ -121,6 +122,8 @@ cd frontend && npm run typecheck && npm run test:cov && npm run build && npm run
 The Playwright E2E spins up the real backend and frontend (see `frontend/playwright.config.ts`).
 
 ## Deployment
+
+> **Live now:** backend on Render (`tripoptimizer-api.onrender.com`), frontend on Vercel (`tripoptimizer-rouge.vercel.app`). The steps below reproduce that setup from a fresh clone.
 
 Backend → **Render** (`render.yaml`), frontend → **Vercel** (`vercel.json`). Both configs are committed, so the deploy is reproducible. Deploy order matters because the two services reference each other's URLs:
 

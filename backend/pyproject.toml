@@ -7,6 +7,10 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "duckdb>=1.1",
+    # Serving needs these too now: on-demand live fares (token-gated) fetch via
+    # httpx with tenacity backoff, so they can no longer live only in `ingest`.
+    "httpx>=0.27",
+    "tenacity>=9.0",
 ]
 
 [project.optional-dependencies]

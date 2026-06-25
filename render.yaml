@@ -23,3 +23,11 @@ services:
       # If unset, CORS defaults to http://localhost:5173 and the live frontend is blocked.
       - key: FRONTEND_ORIGINS
         sync: false
+      # OPTIONAL. Travelpayouts token turns on on-demand real fares (each missing
+      # cell is fetched live once, then cached in-process). Unset -> the service
+      # serves the committed snapshot + synthetic fallback (no behaviour change).
+      - key: TRAVELPAYOUTS_TOKEN
+        sync: false
+      # Travelpayouts market (EU markets are denser); used only with the token.
+      - key: TRAVELPAYOUTS_MARKET
+        value: es

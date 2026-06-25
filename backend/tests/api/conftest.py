@@ -9,6 +9,7 @@ from tripoptimizer.api import dependencies
 @pytest.fixture(autouse=True)
 def _no_snapshot(tmp_path, monkeypatch):
     monkeypatch.setenv("TRIPOPTIMIZER_SNAPSHOT", str(tmp_path / "absent.parquet"))
+    monkeypatch.delenv("TRAVELPAYOUTS_TOKEN", raising=False)  # deterministic: no live layer
     dependencies.get_provider.cache_clear()
     dependencies.get_snapshot_date.cache_clear()
     yield

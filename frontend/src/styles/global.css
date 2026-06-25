@@ -4,11 +4,41 @@
 @tailwind utilities;
 
 body {
-  background: var(--surface);
+  background-color: var(--paper);
   color: var(--ink);
   font-family: var(--font-display);
 }
+
+/* Monospace, fixed-width digits for fares/dates/codes so columns line up. */
 .tabular {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* Faux barcode for the boarding-pass stub (color via currentColor). */
+.barcode {
+  background-image: repeating-linear-gradient(
+    90deg,
+    currentColor 0 2px,
+    transparent 2px 4px,
+    currentColor 4px 7px,
+    transparent 7px 9px,
+    currentColor 9px 10px,
+    transparent 10px 13px
+  );
+}
+
+input[type="range"] {
+  accent-color: var(--teal);
+}
+
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

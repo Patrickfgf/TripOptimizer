@@ -5,7 +5,7 @@ import { CostSummary } from "./CostSummary";
 describe("CostSummary", () => {
   it("shows total, data source and snapshot date", () => {
     render(<CostSummary total={214} dataSource="mixed" snapshotDate="2026-06-15" />);
-    expect(screen.getByText("€214")).toBeInTheDocument();
+    expect(screen.getByText("€214.00")).toBeInTheDocument();
     expect(screen.getByText(/mixed/i)).toBeInTheDocument();
     expect(screen.getByText(/2026-06-15/)).toBeInTheDocument();
   });

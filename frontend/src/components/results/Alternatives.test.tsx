@@ -12,8 +12,8 @@ describe("Alternatives", () => {
   it("lists alternatives with the delta vs the best total", () => {
     render(<Alternatives alternatives={ALTS} bestTotal={214} />);
     expect(screen.getByText(/ROM → BCN/)).toBeInTheDocument();
-    expect(screen.getByText("+€37")).toBeInTheDocument();
-    expect(screen.getByText("+€54")).toBeInTheDocument();
+    expect(screen.getByText("+€37.00")).toBeInTheDocument();
+    expect(screen.getByText("+€54.00")).toBeInTheDocument();
   });
   it("renders nothing when there are no alternatives", () => {
     const { container } = render(<Alternatives alternatives={[]} bestTotal={214} />);

@@ -5,7 +5,12 @@ import datetime as dt
 import httpx
 import respx
 
-from tripoptimizer.core.fares.travelpayouts import API_URL, TravelpayoutsProvider
+from tripoptimizer.core.fares.travelpayouts import (
+    _BACKOFF_CAP_S,
+    API_URL,
+    TravelpayoutsProvider,
+    compute_backoff,
+)
 
 
 def _provider() -> TravelpayoutsProvider:
@@ -68,3 +73,20 @@ def test_retries_on_429_then_succeeds() -> None:
     fare = _provider().get_fare("LIS", "BCN", dt.date(2026, 7, 1))
     assert route.call_count == 2
     assert fare.price == 50.0
+
+
+def test_compute_backoff_honors_retry_after() -> None:
+    assert compute_backoff(attempt=1, retry_after=3.0) == 3.0
+    assert compute_backoff(attempt=5, retry_after=2.5) == 2.5
+
+
+def test_compute_backoff_is_exponential_without_retry_after() -> None:
+    b1 = compute_backoff(attempt=1, retry_after=None)
+    b2 = compute_backoff(attempt=2, retry_after=None)
+    b3 = compute_backoff(attempt=3, retry_after=None)
+    assert 0 < b1 < b2 < b3
+
+
+def test_compute_backoff_caps_long_waits() -> None:
+    assert compute_backoff(attempt=50, retry_after=None) <= _BACKOFF_CAP_S
+    assert compute_backoff(attempt=1, retry_after=9999.0) == _BACKOFF_CAP_S

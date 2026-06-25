@@ -13,12 +13,12 @@ export function RouteMap({ legs, airports }: Props) {
   const distinct = Array.from(new Set(legs.flatMap((l) => [l.origin, l.destination])));
 
   return (
-    <div className="overflow-hidden rounded-bento border border-line bg-surface-2">
+    <div className="overflow-hidden rounded-bento border border-line bg-surface-2 shadow-ticket">
       <ComposableMap projection="geoAzimuthalEqualArea" projectionConfig={{ rotate: [-10, -52, 0], scale: 700 }}>
         <Geographies geography={geoData as object}>
           {({ geographies }) =>
             geographies.map((geo: { rsmKey: string }) => (
-              <Geography key={geo.rsmKey} geography={geo} fill="#efe6d4" stroke="#e7ddc9" />
+              <Geography key={geo.rsmKey} geography={geo} fill="#ede6d6" stroke="#e2d8c6" />
             ))
           }
         </Geographies>
@@ -26,14 +26,14 @@ export function RouteMap({ legs, airports }: Props) {
           const from = coord(leg.origin);
           const to = coord(leg.destination);
           if (!from || !to) return null;
-          return <Line key={i} from={from} to={to} stroke="#e08a00" strokeWidth={1.6} />;
+          return <Line key={i} from={from} to={to} stroke="#0f766e" strokeWidth={1.8} />;
         })}
         {distinct.map((iata) => {
           const c = coord(iata);
           if (!c) return null;
           return (
             <Marker key={iata} coordinates={c}>
-              <circle r={3} fill="#1a1410" />
+              <circle r={3.2} fill="#16314c" stroke="#fbf8f1" strokeWidth={1} />
             </Marker>
           );
         })}

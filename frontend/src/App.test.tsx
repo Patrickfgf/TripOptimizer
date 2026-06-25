@@ -29,6 +29,6 @@ describe("App", () => {
     await userEvent.click(await screen.findByText(/Barcelona/i));
     fireEvent.change(screen.getByLabelText(/start date/i), { target: { value: "2026-07-01" } });
     await userEvent.click(screen.getByRole("button", { name: /optimize route/i }));
-    expect(await screen.findByText("€214")).toBeInTheDocument();
+    expect(await screen.findByText("€214.00")).toBeInTheDocument();
   });
 });

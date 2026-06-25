@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Plane } from "lucide-react";
 import { TripForm } from "./components/trip-form/TripForm";
 import { Results } from "./components/results/Results";
 import { useAirports } from "./hooks/useAirports";
@@ -30,17 +31,27 @@ export default function App() {
   }, []);
 
   return (
-    <main className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
-      <header className="flex flex-col gap-2">
-        <span className="font-mono text-sm uppercase tracking-widest text-accent">TripOptimizer</span>
-        <h1 className="text-4xl font-bold tracking-tight">Cheapest order for your multi-city trip</h1>
-        <p className="text-muted">We reorder your cities and slide the dates to find the lowest total airfare.</p>
+    <main className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-12">
+      <header className="flex flex-col gap-3">
+        <span className="flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-[0.25em] text-teal">
+          <Plane className="h-4 w-4 -rotate-45" aria-hidden /> TripOptimizer
+        </span>
+        <h1 className="max-w-2xl text-3xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl">
+          The cheapest <span className="text-teal">order</span> for your multi-city trip
+        </h1>
+        <p className="max-w-xl text-muted">
+          We reorder your cities and slide the dates to find the lowest total airfare.
+        </p>
       </header>
 
       <TripForm value={trip} onChange={setTrip} onSubmit={runOptimize} />
 
-      {optimize.isPending && <p className="text-muted">Optimizing&hellip;</p>}
-      {optimize.isError && <p className="text-red-700">{(optimize.error as Error).message}</p>}
+      {optimize.isPending && <p className="tabular animate-pulse text-sm text-muted">Optimizing&hellip;</p>}
+      {optimize.isError && (
+        <p className="rounded-bento-sm border border-coral/40 bg-coral/10 px-4 py-3 text-sm font-medium text-coral">
+          {(optimize.error as Error).message}
+        </p>
+      )}
       {optimize.data && <Results result={optimize.data} airports={airports} />}
     </main>
   );

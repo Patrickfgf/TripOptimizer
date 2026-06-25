@@ -12,19 +12,17 @@ type Props = { result: TripResult; airports: Airport[] };
 
 export function Results({ result, airports }: Props) {
   return (
-    <section className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
-      <div className="md:row-span-2">
+    <section className="flex flex-col gap-4">
+      <CostSummary total={result.best.total} dataSource={result.data_source} snapshotDate={result.snapshot_date} />
+      <div className="grid gap-4 md:grid-cols-[1.1fr_1fr]">
         <Suspense
-          fallback={<div className="aspect-square rounded-bento border border-line bg-surface-2" aria-busy="true" />}
+          fallback={<div className="aspect-[4/3] rounded-bento border border-line bg-surface-2" aria-busy="true" />}
         >
           <RouteMap legs={result.best.legs} airports={airports} />
         </Suspense>
-      </div>
-      <CostSummary total={result.best.total} dataSource={result.data_source} snapshotDate={result.snapshot_date} />
-      <div className="flex flex-col gap-4 md:col-span-2">
         <ItineraryTimeline legs={result.best.legs} />
-        <Alternatives alternatives={result.alternatives} bestTotal={result.best.total} />
       </div>
+      <Alternatives alternatives={result.alternatives} bestTotal={result.best.total} />
     </section>
   );
 }

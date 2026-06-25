@@ -17,7 +17,7 @@ vi.mock("react-simple-maps", () => ({
 describe("Results", () => {
   it("renders the best total, timeline and alternatives", () => {
     render(<Results result={RESULT as TripResult} airports={AIRPORTS} />);
-    expect(screen.getByText("€214")).toBeInTheDocument();
+    expect(screen.getByText("€214.00")).toBeInTheDocument();
     expect(screen.getByText("LIS → BCN")).toBeInTheDocument();
     expect(screen.getByText(/ROM → BCN/)).toBeInTheDocument();
   });

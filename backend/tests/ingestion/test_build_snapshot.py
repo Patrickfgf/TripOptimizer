@@ -2,10 +2,14 @@
 
 import datetime as dt
 import sys
+import threading
 from pathlib import Path
 
+import httpx
+import pytest
+
 from tripoptimizer.core.fares.models import Fare
-from tripoptimizer.core.fares.travelpayouts import TravelpayoutsProvider
+from tripoptimizer.core.fares.travelpayouts import RateLimited, TravelpayoutsProvider
 from tripoptimizer.ingestion import build_snapshot
 from tripoptimizer.ingestion.build_snapshot import collect_rows, curate
 from tripoptimizer.ingestion.snapshot import read_fare_cell
@@ -94,3 +98,93 @@ def test_main_writes_snapshot_via_injected_provider(tmp_path: Path, monkeypatch)
     assert out.exists()
     price, _, source = read_fare_cell(str(out), "LIS", "BCN", dt.date(2026, 7, 1))
     assert price == 50.0 and source == "travelpayouts"
+
+
+class _RaisingProvider:
+    """Raises a transient RateLimited for one pair; returns a fare otherwise."""
+
+    def get_fare(self, origin, destination, fly_date):
+        if (origin, destination) == ("LIS", "BCN"):
+            raise RateLimited()
+        return Fare(origin, destination, fly_date, 50.0, "EUR", "travelpayouts")
+
+
+def test_collect_rows_skips_cells_that_raise_transient_errors() -> None:
+    rows = collect_rows(
+        _RaisingProvider(),
+        airports=["LIS", "BCN"],
+        dates=[dt.date(2026, 7, 1)],
+        snapshot_date=SNAP,
+        max_workers=2,
+    )
+    pairs = {(r["origin"], r["destination"]) for r in rows}
+    assert ("LIS", "BCN") not in pairs  # raised -> skipped, the run is not crashed
+    assert ("BCN", "LIS") in pairs
+
+
+class _ConcurrencyProbe:
+    """Proves >1 fare is fetched at once: a barrier that only releases in pairs."""
+
+    def __init__(self, parties: int) -> None:
+        self._barrier = threading.Barrier(parties, timeout=3)
+        self.ran_concurrently = False
+
+    def get_fare(self, origin, destination, fly_date):
+        try:
+            self._barrier.wait()
+            self.ran_concurrently = True
+        except threading.BrokenBarrierError:
+            pass
+        return Fare(origin, destination, fly_date, 50.0, "EUR", "travelpayouts")
+
+
+def test_collect_rows_runs_cells_concurrently() -> None:
+    probe = _ConcurrencyProbe(parties=2)
+    rows = collect_rows(
+        probe,
+        airports=["LIS", "BCN", "ROM"],
+        dates=[dt.date(2026, 7, 1)],
+        snapshot_date=SNAP,
+        max_workers=4,
+    )
+    assert probe.ran_concurrently is True  # two get_fare calls overlapped
+    assert len(rows) == 6  # 3 airports -> 6 ordered pairs, all collected
+
+
+def _status_error(code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://example.test")
+    return httpx.HTTPStatusError(
+        "boom", request=request, response=httpx.Response(code, request=request)
+    )
+
+
+class _StatusErrorProvider:
+    def __init__(self, code: int) -> None:
+        self._code = code
+
+    def get_fare(self, origin, destination, fly_date):
+        raise _status_error(self._code)
+
+
+def test_collect_rows_skips_server_errors() -> None:
+    rows = collect_rows(
+        _StatusErrorProvider(503),
+        airports=["LIS", "BCN"],
+        dates=[dt.date(2026, 7, 1)],
+        snapshot_date=SNAP,
+        max_workers=2,
+    )
+    assert rows == []  # 5xx is a transient per-cell error -> skipped, no crash
+
+
+def test_collect_rows_fails_loud_on_auth_error() -> None:
+    # A 401/403 is systemic (bad token): it must crash the run, not silently
+    # produce an empty snapshot.
+    with pytest.raises(httpx.HTTPStatusError):
+        collect_rows(
+            _StatusErrorProvider(401),
+            airports=["LIS", "BCN"],
+            dates=[dt.date(2026, 7, 1)],
+            snapshot_date=SNAP,
+            max_workers=2,
+        )

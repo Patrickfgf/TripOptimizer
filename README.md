@@ -37,7 +37,7 @@ TripOptimizer/
 │  ├─ tripoptimizer/
 │  │  ├─ core/
 │  │  │  ├─ optimizer/   # cheapest-route search (pure, no I/O) + test oracle
-│  │  │  ├─ fares/       # FareProvider strategy: Travelpayouts | Cached | Synthetic | Fallback
+│  │  │  ├─ fares/       # FareProvider chain: Cached(seed) -> CachingLive(on-demand) -> Synthetic
 │  │  │  └─ graph/       # airports/IATA + haversine distance
 │  │  ├─ api/            # FastAPI: /optimize, /airports, /health
 │  │  └─ ingestion/      # offline: Travelpayouts → normalized Parquet snapshot (idempotent CLI)
@@ -55,7 +55,7 @@ TripOptimizer/
 |---|---|
 | Core / API | Python 3.12, FastAPI, Pydantic v2 |
 | Data | DuckDB + Parquet (typed, columnar, zero-server) |
-| Flight data | Travelpayouts Data API (cached, offline ingestion) + synthetic fallback |
+| Flight data | Travelpayouts Data API — on-demand live fetch + in-process cache (token-gated), committed snapshot seed, synthetic fallback |
 | Frontend | React 18, TypeScript, Vite, Tailwind, shadcn/ui |
 | Frontend data/state | TanStack Query, Zod (controlled inputs + parsing), URL search-param state |
 | Tests | pytest (backend) · Vitest + RTL + MSW + Playwright (frontend) |
@@ -63,7 +63,7 @@ TripOptimizer/
 A few deliberate **why-X-not-Y** calls (full rationale in `docs/`):
 
 - **Travelpayouts, not Amadeus/Skyscanner** — Amadeus is decommissioning self-service (2026), Skyscanner is partner-gated; Travelpayouts gives a free token with cheapest-by-date prices.
-- **Committed snapshot, never live-per-request** — a combinatorial search fires `~N²` price lookups; doing that live would burn any quota and break reproducibility. A snapshot keyed by `(origin, destination, date)` fixes both.
+- **On-demand + cache, not a pre-computed N² grid** — a combinatorial search fires `~N²` price lookups, so pre-computing the whole airport×date grid hits the free API's rate limit hard (46 airports × 30 days ≈ 62k calls). Instead each `/optimize` fetches only the cells *its* trip needs — concurrently, behind a time budget — and caches them in-process; a committed snapshot seeds popular routes. Naive live-per-*request* is still avoided: results are cached and reused, and the source labels stay honest.
 - **Synthetic fallback behind a Strategy interface** — any missing `(A, B, date)` cell falls back to a deterministic synthetic fare, so the public demo never returns empty, and each leg honestly reports `cached` vs `synthetic`.
 
 ## API
@@ -133,12 +133,15 @@ Backend → **Render** (`render.yaml`), frontend → **Vercel** (`vercel.json`).
 
 ## Data & provenance
 
-The committed snapshot covers a bounded window of European routes; trips that fall outside the cached `(origin, destination, date)` cells are served deterministic synthetic fares, and every leg is labelled accordingly. Regenerate the snapshot from live data (needs a free Travelpayouts token in `backend/.env`):
+Fares resolve through a `FallbackFareProvider` chain — **committed snapshot (seed) → on-demand live fetch (cached) → synthetic** — and every leg is labelled with where its price came from (`cached` / `synthetic`, aggregated per trip to `cached` / `synthetic` / `mixed`). The serving universe is **46 European airports**.
+
+- **On-demand (serving).** With `TRAVELPAYOUTS_TOKEN` set, a cache miss is fetched live from Travelpayouts, cached in-process, and reused. Each `/optimize` first warms its trip's `(origin, destination, date)` cells in one concurrent, time-budgeted batch, so the search hits the cache instead of firing hundreds of sequential calls. Without the token the service runs on the snapshot + synthetic fallback only (no behaviour change). The in-process cache resets on restart (e.g. Render's free tier sleeps when idle); a durable cache (Postgres) is the next step toward a wider airport set and a 90-day window.
+- **Seed snapshot (offline).** An optional committed Parquet warms popular routes for an instant first response. (Re)generate it from live data (needs the free Travelpayouts token in `backend/.env`):
 
 ```bash
 cd backend
 uv run python -m tripoptimizer.ingestion.build_snapshot \
-  --airports LIS OPO MAD BCN CDG FCO BER ATH --start 2026-07-01 --days 30
+  --airports LIS OPO MAD BCN CDG FCO BER ATH --start 2026-07-01 --days 30 --workers 8
 ```
 
 ## Roadmap

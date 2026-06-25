@@ -6,9 +6,11 @@ from tripoptimizer.api.dependencies import (
     get_airports,
     get_provider,
     get_snapshot_date,
+    live_fares_enabled,
 )
 from tripoptimizer.api.schemas import AirportSchema, TripRequestSchema, TripResultSchema
 from tripoptimizer.core.optimizer.models import TripRequest
+from tripoptimizer.core.optimizer.prefetch import prefetch
 from tripoptimizer.core.optimizer.runner import optimize
 
 router = APIRouter()
@@ -67,5 +69,11 @@ def optimize_route(
         start_date=request.start_date,
         flex_days=request.flex_days,
     )
-    result = optimize(trip, get_provider(), engine=engine)
+    provider = get_provider()
+    if live_fares_enabled():
+        # Warm the on-demand cache for this trip's cells in one parallel batch,
+        # so the engine's per-cell lookups all hit the cache instead of firing
+        # hundreds of sequential live calls.
+        prefetch(trip, provider)
+    result = optimize(trip, provider, engine=engine)
     return TripResultSchema.from_core(result, snapshot_date=get_snapshot_date())

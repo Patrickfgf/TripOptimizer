@@ -46,3 +46,50 @@ def test_get_provider_inserts_caching_live_layer_with_token(monkeypatch) -> None
     finally:
         dependencies.get_provider.cache_clear()
         dependencies.get_fare_cache.cache_clear()
+
+
+def test_get_fare_cache_uses_postgres_when_database_url_set(monkeypatch) -> None:
+    """With DATABASE_URL set, get_fare_cache builds a PostgresFareCache, honors
+    FARE_CACHE_TTL_DAYS, and registers pool.close at exit (no leaked pool)."""
+    import contextlib
+    import datetime as dt
+
+    import psycopg_pool
+
+    from tripoptimizer.core.fares.postgres_cache import PostgresFareCache
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host/db")
+    monkeypatch.setenv("FARE_CACHE_TTL_DAYS", "3")
+    registered: list = []
+
+    class _FakeConn:
+        def execute(self, sql, params=None):
+            return self
+
+        def fetchone(self):
+            return None
+
+    class _FakePool:
+        def __init__(self, dsn, **kwargs):
+            self.opened = False
+
+        def open(self):
+            self.opened = True
+
+        @contextlib.contextmanager
+        def connection(self):
+            yield _FakeConn()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(psycopg_pool, "ConnectionPool", _FakePool)
+    monkeypatch.setattr("atexit.register", registered.append)
+    dependencies.get_fare_cache.cache_clear()
+    try:
+        cache = dependencies.get_fare_cache()
+        assert isinstance(cache, PostgresFareCache)
+        assert cache._ttl == dt.timedelta(days=3)  # FARE_CACHE_TTL_DAYS honored
+        assert registered  # pool.close registered for cleanup -> no leaked pool
+    finally:
+        dependencies.get_fare_cache.cache_clear()

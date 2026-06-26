@@ -11,6 +11,10 @@ dependencies = [
     # httpx with tenacity backoff, so they can no longer live only in `ingest`.
     "httpx>=0.27",
     "tenacity>=9.0",
+    # Durable fare cache (PostgresFareCache), used only when DATABASE_URL is set;
+    # lazy-imported at wiring time so a DB-less run never touches it.
+    "psycopg[binary]>=3.2",
+    "psycopg-pool>=3.2",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +34,9 @@ testpaths = ["tests"]
 # importlib mode lets test files share a basename across dirs (e.g. graph/ and
 # api/ both have test_airports.py) without needing __init__.py package markers.
 addopts = "-q --cov=tripoptimizer --cov-report=term-missing --import-mode=importlib"
+markers = [
+    "integration: requires a real database (set TEST_DATABASE_URL); skipped by default",
+]
 
 [tool.ruff]
 line-length = 100

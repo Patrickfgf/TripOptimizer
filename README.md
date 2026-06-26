@@ -54,7 +54,7 @@ TripOptimizer/
 | Layer | Choice |
 |---|---|
 | Core / API | Python 3.12, FastAPI, Pydantic v2 |
-| Data | DuckDB + Parquet (typed, columnar, zero-server) |
+| Data | DuckDB + Parquet (typed, columnar, zero-server) · optional Postgres (durable fare cache) |
 | Flight data | Travelpayouts Data API — on-demand live fetch + in-process cache (token-gated), committed snapshot seed, synthetic fallback |
 | Frontend | React 18, TypeScript, Vite, Tailwind, shadcn/ui |
 | Frontend data/state | TanStack Query, Zod (controlled inputs + parsing), URL search-param state |
@@ -62,7 +62,7 @@ TripOptimizer/
 
 A few deliberate **why-X-not-Y** calls (full rationale in `docs/`):
 
-- **Travelpayouts, not Amadeus/Skyscanner** — Amadeus is decommissioning self-service (2026), Skyscanner is partner-gated; Travelpayouts gives a free token with cheapest-by-date prices.
+- **Travelpayouts, not Amadeus/Skyscanner** — Amadeus decommissioned its self-service tier (2026), and Skyscanner's official API is partner-gated (it needs an established business with ~100k monthly traffic). "Just scrape Skyscanner" is a dead end too: it breaks their ToS, is blocked by Akamai + TLS fingerprinting, and — for an EU-focused project — is contractually enforceable (CJEU *Ryanair v. PR Aviation*, C‑30/14). Travelpayouts gives a free, sanctioned token with cheapest-by-date prices.
 - **On-demand + cache, not a pre-computed N² grid** — a combinatorial search fires `~N²` price lookups, so pre-computing the whole airport×date grid hits the free API's rate limit hard (46 airports × 30 days ≈ 62k calls). Instead each `/optimize` fetches only the cells *its* trip needs — concurrently, behind a time budget — and caches them in-process; a committed snapshot seeds popular routes. Naive live-per-*request* is still avoided: results are cached and reused, and the source labels stay honest.
 - **Synthetic fallback behind a Strategy interface** — any missing `(A, B, date)` cell falls back to a deterministic synthetic fare, so the public demo never returns empty, and each leg honestly reports `cached` vs `synthetic`.
 
@@ -131,11 +131,14 @@ Backend → **Render** (`render.yaml`), frontend → **Vercel** (`vercel.json`).
 2. **Frontend on Vercel** — Import the repo. Vercel reads `vercel.json` (root). Set env var **`VITE_API_BASE_URL`** to the Render URL from step 1. Deploy and note the Vercel URL.
 3. **Close the loop** — back on Render, set **`FRONTEND_ORIGINS`** to the exact Vercel URL and redeploy. Without this, the live frontend is blocked by CORS (the backend logs a startup warning when it's unset).
 
+**Optional — durable fare cache:** create a free **[Neon](https://neon.tech) Postgres** and set **`DATABASE_URL`** on Render (prefer the pooled `-pooler` connection string) to persist on-demand fares across restarts; the `fare_cache` table is created automatically on first use. Leave it unset to keep the in-process cache.
+
 ## Data & provenance
 
 Fares resolve through a `FallbackFareProvider` chain — **committed snapshot (seed) → on-demand live fetch (cached) → synthetic** — and every leg is labelled with where its price came from (`cached` / `synthetic`, aggregated per trip to `cached` / `synthetic` / `mixed`). The serving universe is **46 European airports**.
 
-- **On-demand (serving).** With `TRAVELPAYOUTS_TOKEN` set, a cache miss is fetched live from Travelpayouts, cached in-process, and reused. Each `/optimize` first warms its trip's `(origin, destination, date)` cells in one concurrent, time-budgeted batch, so the search hits the cache instead of firing hundreds of sequential calls. Without the token the service runs on the snapshot + synthetic fallback only (no behaviour change). The in-process cache resets on restart (e.g. Render's free tier sleeps when idle); a durable cache (Postgres) is the next step toward a wider airport set and a 90-day window.
+- **On-demand (serving).** With `TRAVELPAYOUTS_TOKEN` set, a cache miss is fetched live from Travelpayouts, cached, and reused. Each `/optimize` first warms its trip's `(origin, destination, date)` cells in one concurrent, time-budgeted batch, so the search hits the cache instead of firing hundreds of sequential calls. Without the token the service runs on the snapshot + synthetic fallback only (no behaviour change).
+- **Durable cache (optional).** The default cache is in-process and resets on restart (e.g. Render's free tier sleeps when idle), so popular routes re-fetch on every wake. Set `DATABASE_URL` and the same on-demand fares persist in **Postgres** instead — a parameterized UPSERT with a 7-day freshness TTL (`FARE_CACHE_TTL_DAYS`), behind the same `FareCacheStore` interface, so nothing else changes. This survives restarts and is the unlock toward a wider airport set and a 90-day window. A DB outage degrades to a cold cache, never a 500.
 - **Seed snapshot (offline).** An optional committed Parquet warms popular routes for an instant first response. (Re)generate it from live data (needs the free Travelpayouts token in `backend/.env`):
 
 ```bash

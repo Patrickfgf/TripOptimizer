@@ -17,6 +17,7 @@ from tripoptimizer.core.fares.cached import CachedProvider
 from tripoptimizer.core.fares.chain import FallbackFareProvider
 from tripoptimizer.core.fares.on_demand import (
     CachingLiveProvider,
+    FareCacheStore,
     InMemoryFareCache,
     SafeLiveProvider,
 )
@@ -49,10 +50,44 @@ def get_airports() -> dict[str, Airport]:
     return load_airports(_airports_csv_path())
 
 
+def database_url() -> str | None:
+    """The durable Postgres cache is wired only when DATABASE_URL is configured."""
+    return os.environ.get("DATABASE_URL") or None
+
+
 @functools.lru_cache(maxsize=1)
-def get_fare_cache() -> InMemoryFareCache:
-    """Process-lifetime on-demand fare cache (resets on restart)."""
-    return InMemoryFareCache()
+def get_fare_cache() -> FareCacheStore:
+    """Process-wide on-demand fare cache: durable Postgres when DATABASE_URL is set
+    (survives Render restarts), else an in-process dict that resets on restart."""
+    dsn = database_url()
+    return _postgres_cache(dsn) if dsn else InMemoryFareCache()
+
+
+def _postgres_cache(dsn: str) -> FareCacheStore:
+    import atexit
+
+    from psycopg_pool import ConnectionPool
+
+    from tripoptimizer.core.fares.postgres_cache import DEFAULT_TTL, PostgresFareCache
+
+    raw_ttl = os.environ.get("FARE_CACHE_TTL_DAYS")
+    if raw_ttl:
+        # Operator config, not user input: fail loud on a bad value instead of
+        # silently building a 0/negative/NaN TTL that disables the cache.
+        days = float(raw_ttl)
+        if not 0 < days <= 365:
+            raise ValueError(f"FARE_CACHE_TTL_DAYS must be in (0, 365], got {raw_ttl!r}")
+        ttl = dt.timedelta(days=days)
+    else:
+        ttl = DEFAULT_TTL
+    # min_size=0: hold no idle connections (Neon free scales to zero and caps the
+    # connection budget). max_size kept small for the free tier; if you ever run
+    # multiple workers, prefer Neon's pooled (-pooler) DSN. The pool opens lazily
+    # and is closed at interpreter exit like the live httpx.Client (no leak).
+    pool = ConnectionPool(dsn, min_size=0, max_size=5, open=False)
+    pool.open()
+    atexit.register(pool.close)
+    return PostgresFareCache(pool, ttl=ttl)
 
 
 def _live_provider() -> FareProvider:

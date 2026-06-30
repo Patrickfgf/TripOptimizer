@@ -31,3 +31,16 @@ services:
       # Travelpayouts market (EU markets are denser); used only with the token.
       - key: TRAVELPAYOUTS_MARKET
         value: es
+      # OPTIONAL. Durable Postgres cache for the on-demand live fares. Set to a Neon
+      # connection string (prefer the DIRECT, non-pooler DSN for a single uvicorn
+      # worker) to persist fetched fares across restarts -> survives Render free-tier
+      # cold starts and unlocks the 90-day / all-Europe grid. Unset -> an in-process
+      # dict cache is used instead (resets on every restart; no other behaviour
+      # change). Only exercised together with TRAVELPAYOUTS_TOKEN.
+      - key: DATABASE_URL
+        sync: false
+      # OPTIONAL. Days before a cached fare is treated as stale and re-fetched.
+      # Must be in (0, 365]; defaults to 7 (matches Travelpayouts' freshness window).
+      # Uncomment to override.
+      # - key: FARE_CACHE_TTL_DAYS
+      #   value: "7"

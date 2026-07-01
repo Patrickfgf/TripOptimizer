@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { AirportSchema, TripResultSchema, type Airport, type TripRequest, type TripResult } from "./schemas";
+import {
+  AirportSchema,
+  OptimizeResponseSchema,
+  type Airport,
+  type OptimizeResponse,
+  type TripRequest,
+} from "./schemas";
 
 // Empty base URL -> relative paths hit the Vite dev proxy (/api). Set VITE_API_BASE_URL in prod.
 export function apiBaseUrl(): string {
@@ -32,8 +38,10 @@ export function getHealth() {
   );
 }
 
-export function optimize(req: TripRequest): Promise<TripResult> {
-  return getJson("/optimize?engine=bruteforce", TripResultSchema, {
+// Returns either a full result (status "ok") or an honest "incomplete" result when no
+// route can be fully priced from real fares.
+export function optimize(req: TripRequest): Promise<OptimizeResponse> {
+  return getJson("/optimize?engine=bruteforce", OptimizeResponseSchema, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),

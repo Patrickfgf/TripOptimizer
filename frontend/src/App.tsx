@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plane } from "lucide-react";
 import { TripForm } from "./components/trip-form/TripForm";
 import { Results } from "./components/results/Results";
+import { IncompleteNotice } from "./components/results/IncompleteNotice";
 import { useAirports } from "./hooks/useAirports";
 import { useOptimize } from "./hooks/useOptimize";
 import { decodeTrip, encodeTrip, toApiRequest, type TripInput } from "./lib/urlState";
@@ -52,7 +53,12 @@ export default function App() {
           {(optimize.error as Error).message}
         </p>
       )}
-      {optimize.data && <Results result={optimize.data} airports={airports} />}
+      {optimize.data &&
+        (optimize.data.status === "incomplete" ? (
+          <IncompleteNotice result={optimize.data} />
+        ) : (
+          <Results result={optimize.data} airports={airports} />
+        ))}
     </main>
   );
 }

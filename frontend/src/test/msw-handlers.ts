@@ -9,6 +9,7 @@ export const AIRPORTS = [
 ];
 
 export const RESULT = {
+  status: "ok",
   best: {
     order: ["BCN", "ROM"],
     start_offset: 0,
@@ -16,12 +17,22 @@ export const RESULT = {
     legs: [
       { origin: "LIS", destination: "BCN", fly_date: "2026-07-01", price: 48, source: "cached" },
       { origin: "BCN", destination: "ROM", fly_date: "2026-07-04", price: 92, source: "cached" },
-      { origin: "ROM", destination: "BER", fly_date: "2026-07-06", price: 74, source: "synthetic" },
+      { origin: "ROM", destination: "BER", fly_date: "2026-07-06", price: 74, source: "cached" },
     ],
   },
   alternatives: [{ order: ["ROM", "BCN"], start_offset: 0, total: 251, legs: [] }],
-  data_source: "mixed",
+  data_source: "cached",
   snapshot_date: "2026-06-15",
+};
+
+// Real-or-nothing: no fully-priced route -> honest incomplete result with the gaps.
+export const INCOMPLETE = {
+  status: "incomplete",
+  missing_routes: [
+    ["MAD", "DUB"],
+    ["FRA", "ATH"],
+  ],
+  snapshot_date: null,
 };
 
 export const handlers = [

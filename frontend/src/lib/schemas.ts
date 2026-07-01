@@ -27,13 +27,31 @@ export const ItinerarySchema = z.object({
 });
 export type Itinerary = z.infer<typeof ItinerarySchema>;
 
+// A full result: every leg is priced from real data (`cached`; `mixed` if sources differ).
 export const TripResultSchema = z.object({
+  status: z.literal("ok"),
   best: ItinerarySchema,
   alternatives: z.array(ItinerarySchema),
-  data_source: z.enum(["cached", "synthetic", "mixed"]),
+  data_source: z.enum(["cached", "mixed"]),
   snapshot_date: z.string().nullable(),
 });
 export type TripResult = z.infer<typeof TripResultSchema>;
+
+// No fully-real itinerary exists: these (origin, destination) pairs had no real fare in
+// the window. Shown honestly instead of a fabricated price (real-or-nothing).
+export const IncompleteTripSchema = z.object({
+  status: z.literal("incomplete"),
+  missing_routes: z.array(z.tuple([z.string(), z.string()])),
+  snapshot_date: z.string().nullable(),
+});
+export type IncompleteTrip = z.infer<typeof IncompleteTripSchema>;
+
+// The /optimize response is one of the two shapes, discriminated by `status`.
+export const OptimizeResponseSchema = z.discriminatedUnion("status", [
+  TripResultSchema,
+  IncompleteTripSchema,
+]);
+export type OptimizeResponse = z.infer<typeof OptimizeResponseSchema>;
 
 // Client-side request model. Mirrors the backend guardrails so requests are valid before sending.
 export const TripRequestSchema = z

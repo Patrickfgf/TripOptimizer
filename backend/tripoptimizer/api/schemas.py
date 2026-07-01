@@ -3,22 +3,27 @@
 Request validation here enforces the MVP guardrails the pure core deliberately
 omits (max cities, flex cap). Response models serialize the core's frozen
 dataclasses to JSON via ``from_core`` converters, keeping the core Pydantic-free.
+
+The optimize endpoint returns one of two honest shapes: a TripResultSchema
+(``status: "ok"``) or an IncompleteTripSchema (``status: "incomplete"``) when no
+fully-real itinerary exists. No fabricated fares in either.
 """
 
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from tripoptimizer.core.optimizer.models import Itinerary, TripResult
+from tripoptimizer.core.optimizer.models import IncompleteTrip, Itinerary, TripResult
 
 MAX_CITIES = 8
 MAX_FLEX_DAYS = 7
 
 
 def aggregate_data_source(itinerary: Itinerary) -> str:
-    """cached / synthetic when uniform across legs, else 'mixed'."""
+    """The single leg source when uniform across all legs (e.g. 'cached'), else 'mixed'."""
     sources = {leg.source for leg in itinerary.legs}
     return next(iter(sources)) if len(sources) == 1 else "mixed"
 
@@ -76,6 +81,7 @@ class ItinerarySchema(BaseModel):
 
 
 class TripResultSchema(BaseModel):
+    status: Literal["ok"] = "ok"
     best: ItinerarySchema
     alternatives: list[ItinerarySchema]
     data_source: str
@@ -93,6 +99,27 @@ class TripResultSchema(BaseModel):
             best=ItinerarySchema.from_core(result.best),
             alternatives=[ItinerarySchema.from_core(it) for it in result.alternatives],
             data_source=data_source or aggregate_data_source(result.best),
+            snapshot_date=snapshot_date,
+        )
+
+
+class IncompleteTripSchema(BaseModel):
+    """No fully-real itinerary exists.
+
+    ``missing_routes`` are the (origin, destination) pairs with no real fare on any queried
+    date -- shown honestly to the client, never filled with a fabricated price.
+    """
+
+    status: Literal["incomplete"] = "incomplete"
+    missing_routes: list[tuple[str, str]]
+    snapshot_date: date | None = None
+
+    @classmethod
+    def from_core(
+        cls, result: IncompleteTrip, *, snapshot_date: date | None = None
+    ) -> "IncompleteTripSchema":
+        return cls(
+            missing_routes=[route for route in result.missing_routes],
             snapshot_date=snapshot_date,
         )
 

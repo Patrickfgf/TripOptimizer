@@ -19,13 +19,13 @@ When you plan a multi-country trip, the cheapest plan is rarely the order you'd 
 Given a set of cities, days in each, an origin/return airport, and a flexible start date (±N days), the optimizer evaluates every viable city ordering and date offset and returns the cheapest one.
 
 - **Input:** `cities[]`, `days_per_city`, `origin_airport`, `return_airport`, `start_date`, `flex_days`
-- **Output:** the cheapest itinerary `(city order, date offset, per-leg flights, total cost)` + a ranked list of alternatives, each leg labelled with its data source.
+- **Output:** the cheapest itinerary `(city order, date offset, per-leg flights, total cost)` + a ranked list of alternatives, each leg labelled with its data source — or an honest "incomplete" result when a route has no real fare.
 
 **Guardrails:** ≤ 8 cities (keeps the exact search tractable), `flex_days` default ±3 / max ±7, currency fixed to EUR. Flights only in the MVP.
 
 ### The algorithm
 
-With fixed days per city, the date of the *k*-th leg depends only on the *set* of cities already visited — so the search collapses to the **Held–Karp** dynamic program over subsets (`O(2ⁿ·n²)`, exact). A brute-force permutation engine doubles as the **test oracle**: every Held–Karp result is checked against brute force, so the fast path can't silently diverge from the correct one.
+With fixed days per city, the date of the *k*-th leg depends only on the *set* of cities already visited — so the search collapses to the **Held–Karp** dynamic program over subsets (`O(2ⁿ·n²)`, exact). A brute-force permutation engine doubles as the **test oracle**: every Held–Karp result is checked against brute force, so the fast path can't silently diverge from the correct one. A missing real fare makes an itinerary *infeasible* (skipped), never a crash — the engine returns the cheapest fully-real ordering, or reports that none exists.
 
 ## Architecture
 
@@ -37,7 +37,7 @@ TripOptimizer/
 │  ├─ tripoptimizer/
 │  │  ├─ core/
 │  │  │  ├─ optimizer/   # cheapest-route search (pure, no I/O) + test oracle
-│  │  │  ├─ fares/       # FareProvider chain: Cached(seed) -> CachingLive(on-demand) -> Synthetic
+│  │  │  ├─ fares/       # FareProvider chain: Cached(seed) -> CachingMonth(on-demand month-matrix)
 │  │  │  └─ graph/       # airports/IATA + haversine distance
 │  │  ├─ api/            # FastAPI: /optimize, /airports, /health
 │  │  └─ ingestion/      # offline: Travelpayouts → normalized Parquet snapshot (idempotent CLI)
@@ -55,16 +55,16 @@ TripOptimizer/
 |---|---|
 | Core / API | Python 3.12, FastAPI, Pydantic v2 |
 | Data | DuckDB + Parquet (typed, columnar, zero-server) · optional Postgres (durable fare cache) |
-| Flight data | Travelpayouts Data API — on-demand live fetch + in-process cache (token-gated), committed snapshot seed, synthetic fallback |
+| Flight data | Travelpayouts month-matrix — on-demand live fetch (one call warms a whole month) behind a durable cache (token-gated) + committed snapshot seed. **Real-or-nothing: no synthetic fares** |
 | Frontend | React 18, TypeScript, Vite, Tailwind, shadcn/ui |
 | Frontend data/state | TanStack Query, Zod (controlled inputs + parsing), URL search-param state |
 | Tests | pytest (backend) · Vitest + RTL + MSW + Playwright (frontend) |
 
 A few deliberate **why-X-not-Y** calls (full rationale in `docs/`):
 
-- **Travelpayouts, not Amadeus/Skyscanner** — Amadeus decommissioned its self-service tier (2026), and Skyscanner's official API is partner-gated (it needs an established business with ~100k monthly traffic). "Just scrape Skyscanner" is a dead end too: it breaks their ToS, is blocked by Akamai + TLS fingerprinting, and — for an EU-focused project — is contractually enforceable (CJEU *Ryanair v. PR Aviation*, C‑30/14). Travelpayouts gives a free, sanctioned token with cheapest-by-date prices.
-- **On-demand + cache, not a pre-computed N² grid** — a combinatorial search fires `~N²` price lookups, so pre-computing the whole airport×date grid hits the free API's rate limit hard (46 airports × 30 days ≈ 62k calls). Instead each `/optimize` fetches only the cells *its* trip needs — concurrently, behind a time budget — and caches them in-process; a committed snapshot seeds popular routes. Naive live-per-*request* is still avoided: results are cached and reused, and the source labels stay honest.
-- **Synthetic fallback behind a Strategy interface** — any missing `(A, B, date)` cell falls back to a deterministic synthetic fare, so the public demo never returns empty, and each leg honestly reports `cached` vs `synthetic`.
+- **Travelpayouts, not Amadeus/Skyscanner** — Amadeus decommissioned its self-service portal (shutdown July 2026), and Skyscanner's official API is partner-gated (it needs an established business with ~100k monthly traffic). "Just scrape Skyscanner" is a dead end too: it breaks their ToS, is blocked by Akamai + TLS fingerprinting, and — for an EU-focused project — is contractually enforceable (CJEU *Ryanair v. PR Aviation*, C‑30/14). Travelpayouts gives a free, sanctioned token; its **month-matrix** endpoint returns the cheapest fare per day, a whole month per call.
+- **On-demand + cache, not a pre-computed N² grid** — a combinatorial search fires `~N²` price lookups, so pre-computing the whole airport×date grid is infeasible on a free tier. Each `/optimize` fetches only the cells *its* trip needs — concurrently, behind a time budget — and caches them; a committed snapshot seeds popular routes. Measuring real coverage drove the key call: **switching from the per-date endpoint to month-matrix lifted coverage ~31% → ~48% and cut calls ~30×** (one request returns a whole month).
+- **Real-or-nothing, no synthetic fares** — every price shown is real (committed snapshot or live Travelpayouts). When a route has no real fare in the window, the API says so (`status: "incomplete"`, listing the unpriced routes) rather than fabricating a number. The provider chain is a Strategy interface, so a paid live-search source can slot in later to close the remaining coverage gaps without a rewrite.
 
 ## API
 
@@ -85,7 +85,7 @@ curl -X POST localhost:8000/optimize -H 'content-type: application/json' -d '{
 }'
 ```
 
-The response carries `best`, ranked `alternatives`, a `data_source` (`cached` / `synthetic` / `mixed`), and the `snapshot_date` so the UI can be honest about where each price came from.
+The response is either a full result (`status: "ok"`) carrying `best`, ranked `alternatives`, a `data_source` (`cached` / `mixed`), and the `snapshot_date`; or an honest `status: "incomplete"` listing the `missing_routes` that have no real fare — so the UI never shows a fabricated price.
 
 ## Local development
 
@@ -107,7 +107,7 @@ npm install
 npm run dev
 ```
 
-Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` → `frontend/.env` if you need to override defaults. The app runs with **no API key**: it serves the committed snapshot and falls back to synthetic fares.
+Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` → `frontend/.env` if you need to override defaults. The app runs with **no API key**: it serves the committed snapshot, and routes it can't price from real data are reported as unavailable (no synthetic fallback). Set `TRAVELPAYOUTS_TOKEN` to enable on-demand live fares.
 
 ## Testing
 
@@ -135,9 +135,9 @@ Backend → **Render** (`render.yaml`), frontend → **Vercel** (`vercel.json`).
 
 ## Data & provenance
 
-Fares resolve through a `FallbackFareProvider` chain — **committed snapshot (seed) → on-demand live fetch (cached) → synthetic** — and every leg is labelled with where its price came from (`cached` / `synthetic`, aggregated per trip to `cached` / `synthetic` / `mixed`). The serving universe is **46 European airports**.
+Fares resolve through a `FallbackFareProvider` chain — **committed snapshot (seed) → on-demand live fetch (month-matrix, cached)** — and every leg is labelled `cached` (aggregated per trip to `cached` / `mixed`). There is **no synthetic fallback**: a cell with no real fare stays unpriced and the optimizer reports it as an incomplete result. The serving universe is **46 European airports**.
 
-- **On-demand (serving).** With `TRAVELPAYOUTS_TOKEN` set, a cache miss is fetched live from Travelpayouts, cached, and reused. Each `/optimize` first warms its trip's `(origin, destination, date)` cells in one concurrent, time-budgeted batch, so the search hits the cache instead of firing hundreds of sequential calls. Without the token the service runs on the snapshot + synthetic fallback only (no behaviour change).
+- **On-demand (serving).** With `TRAVELPAYOUTS_TOKEN` set, a cache miss fetches the whole month from Travelpayouts' month-matrix (one call ≈ 30 cells), caches it, and reuses it. Each `/optimize` first warms its trip's `(origin, destination, date)` cells in one concurrent, time-budgeted batch, so the search hits the cache instead of firing hundreds of sequential calls. Without the token the service runs on the committed snapshot only — unpriced routes are reported honestly, never synthesized.
 - **Durable cache (optional).** The default cache is in-process and resets on restart (e.g. Render's free tier sleeps when idle), so popular routes re-fetch on every wake. Set `DATABASE_URL` and the same on-demand fares persist in **Postgres** instead — a parameterized UPSERT with a 7-day freshness TTL (`FARE_CACHE_TTL_DAYS`), behind the same `FareCacheStore` interface, so nothing else changes. This survives restarts and is the unlock toward a wider airport set and a 90-day window. A DB outage degrades to a cold cache, never a 500.
 - **Seed snapshot (offline).** An optional committed Parquet warms popular routes for an instant first response. (Re)generate it from live data (needs the free Travelpayouts token in `backend/.env`):
 
@@ -149,7 +149,7 @@ uv run python -m tripoptimizer.ingestion.build_snapshot \
 
 ## Roadmap
 
-MVP is flights-only route optimization. Post-MVP: buses/trains as additional legs, and nearby-city recommendations (suggest detours that lower total cost).
+MVP is flights-only route optimization. Post-MVP: buses/trains as additional legs, and nearby-city recommendations (suggest detours that lower total cost). A paid live-search source (e.g. Duffel) can later close the coverage gaps that a cached-price API leaves on thin routes.
 
 ---
 

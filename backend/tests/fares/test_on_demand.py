@@ -5,6 +5,7 @@ import datetime as dt
 from tripoptimizer.core.fares.models import Fare
 from tripoptimizer.core.fares.on_demand import (
     CachingLiveProvider,
+    CachingMonthProvider,
     InMemoryFareCache,
     SafeLiveProvider,
 )
@@ -96,3 +97,72 @@ def test_safe_live_passes_fare_through() -> None:
 def test_safe_live_swallows_exceptions_to_none() -> None:
     # Serving must degrade to synthetic, never crash, on a live-source error.
     assert SafeLiveProvider(_RaisingLive()).get_fare("LIS", "BCN", DATE) is None
+
+
+# --- CachingMonthProvider: one month fetch warms ~30 cells --------------------
+
+_AUG10 = dt.date(2026, 8, 10)
+_AUG11 = dt.date(2026, 8, 11)  # a day with no price in the month payload
+_AUG12 = dt.date(2026, 8, 12)
+
+
+class _RecordingMonthSource:
+    """Month source returning a preset {date: Fare} and counting calls."""
+
+    def __init__(self, month_fares: dict[dt.date, Fare]) -> None:
+        self._fares = month_fares
+        self.calls = 0
+
+    def get_month(self, origin: str, destination: str, month: dt.date) -> dict[dt.date, Fare]:
+        self.calls += 1
+        return dict(self._fares)
+
+
+def _month_fares() -> dict[dt.date, Fare]:
+    return {
+        _AUG10: Fare("LON", "LIS", _AUG10, 33.0, "EUR", "travelpayouts"),
+        _AUG12: Fare("LON", "LIS", _AUG12, 32.0, "EUR", "travelpayouts"),
+    }
+
+
+def test_caching_month_warms_whole_month_on_one_miss() -> None:
+    store = InMemoryFareCache()
+    source = _RecordingMonthSource(_month_fares())
+    provider = CachingMonthProvider(source, store)
+
+    got = provider.get_fare("LON", "LIS", _AUG10)
+
+    assert got is not None and got.price == 33.0
+    assert got.source == "cached"  # re-stamped, like CachingLiveProvider
+    assert source.calls == 1
+    assert store.get("LON", "LIS", _AUG12) is not None  # the OTHER day was warmed too
+
+
+def test_caching_month_second_day_same_month_is_a_cache_hit() -> None:
+    source = _RecordingMonthSource(_month_fares())
+    provider = CachingMonthProvider(source, InMemoryFareCache())
+
+    provider.get_fare("LON", "LIS", _AUG10)
+    provider.get_fare("LON", "LIS", _AUG12)  # same month, already warmed
+
+    assert source.calls == 1  # one API call served both days
+
+
+def test_caching_month_absent_day_returns_none_without_refetch() -> None:
+    source = _RecordingMonthSource(_month_fares())
+    provider = CachingMonthProvider(source, InMemoryFareCache())
+
+    assert provider.get_fare("LON", "LIS", _AUG11) is None  # no price that day
+    assert provider.get_fare("LON", "LIS", _AUG11) is None  # still none
+    assert source.calls == 1  # guard stops re-fetching a known-absent day's month
+
+
+def test_caching_month_serves_from_store_without_fetching() -> None:
+    store = InMemoryFareCache()
+    store.put(Fare("LON", "LIS", _AUG10, 20.0, "EUR", "cached"))
+    source = _RecordingMonthSource(_month_fares())
+
+    got = CachingMonthProvider(source, store).get_fare("LON", "LIS", _AUG10)
+
+    assert got is not None and got.price == 20.0  # from the store
+    assert source.calls == 0  # store hit, live never touched

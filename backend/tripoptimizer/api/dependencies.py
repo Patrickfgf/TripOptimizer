@@ -1,10 +1,11 @@
 """Process-wide singletons for the API: airports, fare provider, snapshot metadata.
 
-The serving provider is a FallbackFareProvider(Cached -> [CachingLive] -> Synthetic):
-real cached fares from the committed snapshot first, then on-demand live fares
-(fetched once and cached in-process) when a Travelpayouts token is configured,
-then deterministic synthetic so the demo never fails. Paths resolve from the
-committed data dir or env overrides (no hardcoded absolutes).
+The serving provider is a FallbackFareProvider(Cached -> [Safe(CachingMonth)]): real
+cached fares from the committed snapshot first, then on-demand live fares from
+Travelpayouts' month-matrix (one call warms a whole month) when a token is configured.
+There is NO synthetic fallback -- a cell with no real fare stays unpriced, and the
+optimizer reports the gap honestly. Paths resolve from the committed data dir or env
+overrides (no hardcoded absolutes).
 """
 
 import datetime as dt
@@ -16,12 +17,11 @@ from tripoptimizer.core.fares.base import FareProvider
 from tripoptimizer.core.fares.cached import CachedProvider
 from tripoptimizer.core.fares.chain import FallbackFareProvider
 from tripoptimizer.core.fares.on_demand import (
-    CachingLiveProvider,
+    CachingMonthProvider,
     FareCacheStore,
     InMemoryFareCache,
     SafeLiveProvider,
 )
-from tripoptimizer.core.fares.synthetic import SyntheticProvider
 from tripoptimizer.core.graph.airports import Airport, load_airports
 from tripoptimizer.ingestion.snapshot import latest_snapshot_date
 
@@ -95,25 +95,28 @@ def _live_provider() -> FareProvider:
 
     import httpx
 
-    from tripoptimizer.core.fares.travelpayouts import TravelpayoutsProvider
+    from tripoptimizer.core.fares.month_matrix import MonthMatrixProvider
 
     token = os.environ["TRAVELPAYOUTS_TOKEN"]
-    market = os.environ.get("TRAVELPAYOUTS_MARKET", "es")
-    # httpx.Client is thread-safe for concurrent use (prefetch fans out across
-    # threads). It's an lru_cache-owned, process-lifetime singleton, so close its
-    # connection pool at interpreter exit instead of leaking it.
+    # httpx.Client is thread-safe for concurrent use (prefetch fans out across threads).
+    # It's an lru_cache-owned, process-lifetime singleton, so close its connection pool
+    # at interpreter exit instead of leaking it.
     client = httpx.Client(timeout=20.0)
     atexit.register(client.close)
-    live = TravelpayoutsProvider(token, client=client, market=market)
-    return CachingLiveProvider(SafeLiveProvider(live), get_fare_cache())
+    live = MonthMatrixProvider(token, client=client)
+    # Safe OUTSIDE the month cache: a fetch error degrades this leg to None (a miss),
+    # never a 500, and is not recorded as fetched, so it retries on the next request.
+    return SafeLiveProvider(CachingMonthProvider(live, get_fare_cache()))
 
 
 @functools.lru_cache(maxsize=1)
 def get_provider() -> FareProvider:
+    # Real-or-nothing: committed snapshot first, then on-demand live (month-matrix) when a
+    # token is set. No synthetic fallback -- an unpriceable cell stays None and the
+    # optimizer reports the gap honestly instead of fabricating a price.
     providers: list[FareProvider] = [CachedProvider(_snapshot_path())]
     if live_fares_enabled():
         providers.append(_live_provider())
-    providers.append(SyntheticProvider(get_airports()))
     return FallbackFareProvider(providers)
 
 

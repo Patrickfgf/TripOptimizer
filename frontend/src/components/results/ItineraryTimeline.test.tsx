@@ -8,7 +8,6 @@ describe("ItineraryTimeline", () => {
     render(<ItineraryTimeline legs={RESULT.best.legs} />);
     expect(screen.getByText("LIS → BCN")).toBeInTheDocument();
     expect(screen.getByText("€48.00")).toBeInTheDocument();
-    expect(screen.getAllByText(/cached/i)).toHaveLength(2);
-    expect(screen.getByText(/synthetic/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/cached/i)).toHaveLength(3);
   });
 });

@@ -51,3 +51,16 @@ class Itinerary:
 class TripResult:
     best: Itinerary
     alternatives: tuple[Itinerary, ...]
+
+
+@dataclass(frozen=True)
+class IncompleteTrip:
+    """No fully-real itinerary exists.
+
+    Returned instead of a TripResult when no city order is fully priceable from real
+    fares. ``missing_routes`` are the (origin, destination) pairs that had no real fare
+    on ANY queried date in the window -- the structural gaps that block every ordering.
+    The API stays honest about the gap instead of fabricating or partially totalling.
+    """
+
+    missing_routes: tuple[tuple[str, str], ...]

@@ -8,8 +8,13 @@ from tripoptimizer.api.dependencies import (
     get_snapshot_date,
     live_fares_enabled,
 )
-from tripoptimizer.api.schemas import AirportSchema, TripRequestSchema, TripResultSchema
-from tripoptimizer.core.optimizer.models import TripRequest
+from tripoptimizer.api.schemas import (
+    AirportSchema,
+    IncompleteTripSchema,
+    TripRequestSchema,
+    TripResultSchema,
+)
+from tripoptimizer.core.optimizer.models import IncompleteTrip, TripRequest
 from tripoptimizer.core.optimizer.prefetch import prefetch
 from tripoptimizer.core.optimizer.runner import optimize
 
@@ -49,12 +54,13 @@ def list_airports() -> list[AirportSchema]:
     ]
 
 
-@router.post("/optimize", response_model=TripResultSchema)
+@router.post("/optimize", response_model=TripResultSchema | IncompleteTripSchema)
 def optimize_route(
     request: TripRequestSchema,
     engine: str = Query(default="bruteforce", pattern="^(bruteforce|heldkarp)$"),
-) -> TripResultSchema:
-    """Compute the cheapest city ordering (+ date slide) for the trip."""
+) -> TripResultSchema | IncompleteTripSchema:
+    """Cheapest city ordering (+ date slide), or an honest 'incomplete' result when no
+    fully-real itinerary exists (some route has no real fare in the window)."""
     airports = get_airports()
     codes = {request.origin_airport, request.return_airport, *request.cities}
     unknown = sorted(code for code in codes if code not in airports)
@@ -76,4 +82,7 @@ def optimize_route(
         # hundreds of sequential live calls.
         prefetch(trip, provider)
     result = optimize(trip, provider, engine=engine)
-    return TripResultSchema.from_core(result, snapshot_date=get_snapshot_date())
+    snapshot_date = get_snapshot_date()
+    if isinstance(result, IncompleteTrip):
+        return IncompleteTripSchema.from_core(result, snapshot_date=snapshot_date)
+    return TripResultSchema.from_core(result, snapshot_date=snapshot_date)

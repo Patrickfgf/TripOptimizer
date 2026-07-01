@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import threading
 from typing import Protocol
 
 from tripoptimizer.core.fares.base import FareProvider
@@ -95,3 +96,51 @@ class SafeLiveProvider:
                 exc_info=True,
             )
             return None
+
+
+class MonthFareSource(Protocol):
+    """A live source that returns a whole month of fares per call."""
+
+    def get_month(self, origin: str, destination: str, month: dt.date) -> dict[dt.date, Fare]: ...
+
+
+class CachingMonthProvider:
+    """Cache-through FareProvider whose live source is month-granular.
+
+    One store miss fetches the whole month and warms every day into the store, so a trip
+    that queries many days of the same route+month costs a single API call. Fetched fares
+    are re-stamped ``CACHED_SOURCE`` to match CachingLiveProvider's serving contract.
+
+    An in-process per-(origin, destination, month) guard stops a legitimately-absent day
+    from re-fetching its month on every lookup. The guard is process-lifetime; the durable
+    store's TTL owns real freshness. A month fetched once won't refresh until the worker
+    restarts -- acceptable because the free tier restarts well within the TTL.
+    """
+
+    def __init__(self, month_source: MonthFareSource, store: FareCacheStore) -> None:
+        self._source = month_source
+        self._store = store
+        self._fetched_months: set[tuple[str, str, dt.date]] = set()
+        self._lock = threading.Lock()
+
+    def get_fare(self, origin: str, destination: str, fly_date: dt.date) -> Fare | None:
+        cached = self._store.get(origin, destination, fly_date)
+        if cached is not None:
+            return cached
+        month = fly_date.replace(day=1)
+        key = (origin, destination, month)
+        with self._lock:
+            if key not in self._fetched_months:
+                for fare in self._source.get_month(origin, destination, month).values():
+                    self._store.put(
+                        Fare(
+                            fare.origin,
+                            fare.destination,
+                            fare.fly_date,
+                            fare.price,
+                            fare.currency,
+                            CACHED_SOURCE,
+                        )
+                    )
+                self._fetched_months.add(key)
+        return self._store.get(origin, destination, fly_date)

@@ -1,8 +1,9 @@
 """Fare provider backed by the committed Parquet snapshot (read via DuckDB).
 
 Returns Fare(source="cached") on a hit (the spec's serving label), or None on a
-miss so a FallbackFareProvider can fall through to the synthetic source. A missing
-snapshot file is treated as all-misses (not an error) — the demo still works.
+miss so a FallbackFareProvider can fall through to the next provider (the
+on-demand live source). A missing snapshot file is treated as all-misses (not
+an error) — the demo still works.
 """
 
 from __future__ import annotations

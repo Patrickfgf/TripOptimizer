@@ -36,7 +36,7 @@ class Leg:
     destination: str
     fly_date: date
     price: float
-    source: str  # provenance of THIS leg's fare: "cached" | "synthetic" | ...
+    source: str  # provenance of THIS leg's fare: "cached" | ...
 
 
 @dataclass(frozen=True)

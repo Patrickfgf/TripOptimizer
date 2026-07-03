@@ -10,7 +10,7 @@ describe("CostSummary", () => {
     expect(screen.getByText(/2026-06-15/)).toBeInTheDocument();
   });
   it("handles a null snapshot date", () => {
-    render(<CostSummary total={0} dataSource="synthetic" snapshotDate={null} />);
-    expect(screen.getByText(/synthetic/i)).toBeInTheDocument();
+    render(<CostSummary total={0} dataSource="cached" snapshotDate={null} />);
+    expect(screen.getByText(/cached/i)).toBeInTheDocument();
   });
 });

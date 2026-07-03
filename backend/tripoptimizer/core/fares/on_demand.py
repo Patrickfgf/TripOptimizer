@@ -3,7 +3,7 @@
 ``CachingLiveProvider`` is a cache-through FareProvider: it serves a cell from a
 writable cache, and on a miss fetches it from a live provider, persists it, and
 returns it re-stamped as "cached" (it is real data, now cached — the UI already
-understands "cached" vs "synthetic", so no new source value leaks to the front).
+understands "cached", so no new source value leaks to the front).
 
 The cache sits behind a small Protocol so today's in-memory store can be swapped
 for a durable one (e.g. Postgres) without touching the provider — discarded
@@ -75,8 +75,8 @@ class CachingLiveProvider:
 class SafeLiveProvider:
     """Wrap a live provider so serving degrades instead of crashing.
 
-    At serving, any live-source failure (rate limit, auth, transport) must fall
-    through to the synthetic fallback, never 500 the user's request. Errors are
+    At serving, any live-source failure (rate limit, auth, transport) must degrade
+    to None — the cell stays unpriced — never 500 the user's request. Errors are
     logged (not silently swallowed) for observability — unlike the offline
     ingester, which deliberately fails loud on a systemic error like a bad token.
     """

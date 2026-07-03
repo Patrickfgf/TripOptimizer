@@ -67,14 +67,14 @@ def test_trip_result_from_core_serializes() -> None:
         legs=(
             Leg("LIS", "BCN", date(2026, 7, 1), 50.0, "cached"),
             Leg("BCN", "CDG", date(2026, 7, 3), 60.0, "cached"),
-            Leg("CDG", "LIS", date(2026, 7, 6), 70.0, "synthetic"),
+            Leg("CDG", "LIS", date(2026, 7, 6), 70.0, "travelpayouts"),
         ),
         total=180.0,
     )
     core = TripResult(best=best, alternatives=())
     out = TripResultSchema.from_core(core)  # data_source auto-derived
 
-    assert out.data_source == "mixed"  # cached + synthetic legs
+    assert out.data_source == "mixed"  # cached + travelpayouts legs
     assert out.snapshot_date is None
     assert out.best.total == 180.0
     assert out.best.legs[0].source == "cached"

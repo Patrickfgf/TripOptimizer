@@ -2,11 +2,9 @@ import type { Leg } from "../../lib/schemas";
 import { formatEur } from "../../lib/format";
 
 function SourceChip({ source }: { source: string }) {
-  const synthetic = source === "synthetic";
-  const cls = synthetic ? "bg-accent-soft text-teal" : "bg-line/60 text-muted";
   return (
     <span
-      className={`tabular shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${cls}`}
+      className="tabular shrink-0 rounded-full bg-line/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted"
     >
       {source}
     </span>

@@ -1,4 +1,5 @@
-"""Strategy interface for fare sources (synthetic, cached, travelpayouts...)."""
+"""Strategy interface for fare sources (cached, travelpayouts...)."""
+
 from datetime import date
 from typing import Protocol
 

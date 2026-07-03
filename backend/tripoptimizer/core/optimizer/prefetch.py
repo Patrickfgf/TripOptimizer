@@ -48,9 +48,10 @@ def prefetch(
 
     Pair with a CachingLiveProvider over a SafeLiveProvider: cache hits are cheap,
     misses fetch live + persist, and per-cell source failures degrade to None
-    (synthetic fills them at optimize time). Stops at ``timeout_s`` so a slow or
-    half-cold batch never holds the request open for cells x latency — cells not
-    yet warmed simply fall back to synthetic when the engine runs.
+    (the cell stays unpriced). Stops at ``timeout_s`` so a slow or half-cold
+    batch never holds the request open for cells x latency — cells not yet
+    warmed stay unpriced when the engine runs, so orderings that need them
+    become infeasible and may surface as an honest ``incomplete`` result.
     """
     cells = cells_for_request(request)
     deadline = time.monotonic() + timeout_s

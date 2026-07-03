@@ -2,7 +2,7 @@
 
 collect_rows() walks a grid of (origin != destination) x dates, querying a
 FareProvider concurrently; misses and transient per-cell failures are skipped
-(synthetic fallback fills them at serving time). curate() writes the typed,
+(those cells simply stay unpriced at serving). curate() writes the typed,
 deduped, stably-sorted Parquet. Re-running on the same collected rows produces a
 byte-identical snapshot (the repo's idempotency rule).
 
@@ -29,7 +29,7 @@ from tripoptimizer.core.fares.travelpayouts import RateLimited
 from tripoptimizer.ingestion.snapshot import write_snapshot
 
 _DEFAULT_WORKERS = 8
-# Per-cell failures we tolerate by skipping the cell (synthetic fills it at
+# Per-cell failures we tolerate by skipping the cell (it stays unpriced at
 # serving): rate limiting and transport errors (timeouts/connection resets) are
 # expected on large grids and must not crash the whole run. A 5xx is also a
 # transient per-cell skip; a 4xx (e.g. 401 bad token) is systemic and is left

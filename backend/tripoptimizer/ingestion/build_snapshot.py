@@ -37,9 +37,9 @@ from tripoptimizer.ingestion.snapshot import write_snapshot
 _DEFAULT_WORKERS = 8
 _DEFAULT_AIRPORTS_CSV = Path(__file__).resolve().parents[2] / "data" / "airports_sample.csv"
 # Per-pair-month failures we tolerate by skipping the block (its cells stay
-# unpriced at serving): rate limiting and transport errors (timeouts/connection
-# resets) are expected on large grids and must not crash the whole run. A 5xx
-# is also a transient skip; a 4xx (e.g. 401 bad token) is systemic and is left
+# unpriced at serving): rate limiting, transport errors, 5xx, and 400-invalid
+# routes (the API rejects e.g. same-city pairs) are all expected on large grids
+# and must not crash the whole run. Only 401/403 (auth) is systemic and is left
 # to propagate so the run fails loudly instead of writing an empty snapshot.
 _SKIP_ERRORS = (RateLimited, httpx.TransportError)
 
@@ -57,9 +57,12 @@ def _fetch_pair_month(
     except _SKIP_ERRORS:
         return []
     except httpx.HTTPStatusError as exc:
-        if exc.response.status_code >= 500:
-            return []  # transient server error on this pair-month — skip
-        raise  # 4xx (e.g. 401 bad token) is systemic — fail loud
+        if exc.response.status_code in (401, 403):
+            raise  # auth is systemic — fail loud instead of writing an empty snapshot
+        # Anything else is a per-pair-month condition — skip the block: 5xx is
+        # transient, and the API 400s pairs it considers invalid routes (e.g.
+        # same-city CDG->ORY, observed live on the 98-airport grid).
+        return []
     return [
         {
             "origin": fare.origin,

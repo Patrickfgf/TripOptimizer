@@ -259,12 +259,27 @@ def test_collect_rows_skips_server_errors() -> None:
     assert rows == []  # 5xx is a transient per-pair-month error -> skipped, no crash
 
 
-def test_collect_rows_fails_loud_on_auth_error() -> None:
+def test_collect_rows_skips_invalid_route_400() -> None:
+    # The API 400s pairs it considers invalid routes (e.g. same-city CDG->ORY,
+    # observed live). That is a per-pair condition, not a systemic one: skip
+    # the block, don't crash a 38k-call run on one bad pair.
+    rows = collect_rows(
+        _StatusErrorMonthSource(400),
+        airports=["LIS", "BCN"],
+        dates=[dt.date(2026, 7, 1)],
+        snapshot_date=SNAP,
+        max_workers=2,
+    )
+    assert rows == []
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_collect_rows_fails_loud_on_auth_error(status: int) -> None:
     # A 401/403 is systemic (bad token): it must crash the run, not silently
     # produce an empty snapshot.
     with pytest.raises(httpx.HTTPStatusError):
         collect_rows(
-            _StatusErrorMonthSource(401),
+            _StatusErrorMonthSource(status),
             airports=["LIS", "BCN"],
             dates=[dt.date(2026, 7, 1)],
             snapshot_date=SNAP,

@@ -1,4 +1,8 @@
-"""Travelpayouts/Aviasales Data API fare provider (offline ingestion only).
+"""Travelpayouts/Aviasales per-date fare provider (legacy; superseded by month-matrix).
+
+No production caller remains — the ingester now uses MonthMatrixProvider — but this
+module still hosts the shared RateLimited/backoff helpers. Removing the provider
+class itself is a pending cleanup.
 
 Calls v3/prices_for_dates for a single (origin, destination, departure date),
 forcing EUR + an EU market, and returns the cheapest ticket (data[0] with

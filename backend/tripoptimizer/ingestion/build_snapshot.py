@@ -1,16 +1,21 @@
 """Idempotent raw->curated ingestion CLI.
 
-collect_rows() walks a grid of (origin != destination) x dates, querying a
-FareProvider concurrently; misses and transient per-cell failures are skipped
-(those cells simply stay unpriced at serving). curate() writes the typed,
-deduped, stably-sorted Parquet. Re-running on the same collected rows produces a
-byte-identical snapshot (the repo's idempotency rule).
+collect_rows() walks a grid of (origin != destination) x months covering the
+requested date window, querying a MonthFareSource concurrently — one call
+returns a whole month of fares (~30x fewer calls than the old per-date grid,
+and measured ~48% vs ~31% coverage); misses and transient per-pair-month
+failures are skipped (those cells simply stay unpriced at serving). curate()
+writes the typed, deduped, stably-sorted Parquet. Re-running on the same
+collected rows produces a byte-identical snapshot (the repo's idempotency rule).
 
 Default CLI run (needs `uv sync --extra ingest` + TRAVELPAYOUTS_TOKEN in env):
     uv run python -m tripoptimizer.ingestion.build_snapshot \
-        --airports LIS OPO MAD BCN CDG FCO BER ATH \
-        --start 2026-07-01 --days 10 --workers 8 \
+        --start 2026-07-01 --days 90 --workers 8 \
         --out data/fares_snapshot.parquet
+
+The airport universe defaults to data/airports_sample.csv (the serving list),
+so snapshot and serving cannot silently diverge; --airports overrides it for
+ad-hoc runs.
 """
 
 from __future__ import annotations
@@ -24,71 +29,85 @@ from pathlib import Path
 
 import httpx
 
-from tripoptimizer.core.fares.base import FareProvider
+from tripoptimizer.core.fares.on_demand import MonthFareSource
 from tripoptimizer.core.fares.travelpayouts import RateLimited
+from tripoptimizer.core.graph.airports import load_airports
 from tripoptimizer.ingestion.snapshot import write_snapshot
 
 _DEFAULT_WORKERS = 8
-# Per-cell failures we tolerate by skipping the cell (it stays unpriced at
-# serving): rate limiting and transport errors (timeouts/connection resets) are
-# expected on large grids and must not crash the whole run. A 5xx is also a
-# transient per-cell skip; a 4xx (e.g. 401 bad token) is systemic and is left
+_DEFAULT_AIRPORTS_CSV = Path(__file__).resolve().parents[2] / "data" / "airports_sample.csv"
+# Per-pair-month failures we tolerate by skipping the block (its cells stay
+# unpriced at serving): rate limiting and transport errors (timeouts/connection
+# resets) are expected on large grids and must not crash the whole run. A 5xx
+# is also a transient skip; a 4xx (e.g. 401 bad token) is systemic and is left
 # to propagate so the run fails loudly instead of writing an empty snapshot.
 _SKIP_ERRORS = (RateLimited, httpx.TransportError)
 
 
-def _fetch_row(
-    provider: FareProvider,
+def _fetch_pair_month(
+    source: MonthFareSource,
     origin: str,
     destination: str,
-    fly_date: dt.date,
+    month: dt.date,
+    window: set[dt.date],
     snapshot_date: dt.date,
-) -> dict | None:
+) -> list[dict]:
     try:
-        fare = provider.get_fare(origin, destination, fly_date)
+        fares = source.get_month(origin, destination, month)
     except _SKIP_ERRORS:
-        return None
+        return []
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code >= 500:
-            return None  # transient server error on this cell — skip
+            return []  # transient server error on this pair-month — skip
         raise  # 4xx (e.g. 401 bad token) is systemic — fail loud
-    if fare is None:
-        return None
-    return {
-        "origin": fare.origin,
-        "destination": fare.destination,
-        "fly_date": fare.fly_date,
-        "price": fare.price,
-        "currency": fare.currency,
-        "source": fare.source,
-        "snapshot_date": snapshot_date,
-    }
+    return [
+        {
+            "origin": fare.origin,
+            "destination": fare.destination,
+            "fly_date": fare.fly_date,
+            "price": fare.price,
+            "currency": fare.currency,
+            "source": fare.source,
+            "snapshot_date": snapshot_date,
+        }
+        for day, fare in sorted(fares.items())
+        if day in window
+    ]
+
+
+def _months(dates: list[dt.date]) -> list[dt.date]:
+    """The sorted first-of-month dates covering the window."""
+    return sorted({d.replace(day=1) for d in dates})
 
 
 def collect_rows(
-    provider: FareProvider,
+    source: MonthFareSource,
     airports: list[str],
     dates: list[dt.date],
     snapshot_date: dt.date,
     max_workers: int = _DEFAULT_WORKERS,
 ) -> list[dict]:
-    """Fetch every (origin != destination) x date cell concurrently.
+    """Fetch every (origin != destination) x month block concurrently.
 
-    Results are gathered in submit order, so the output is deterministic
-    regardless of completion order; misses and transient failures drop out.
+    The month payload is filtered to the requested window; results are gathered
+    in submit order, so the output is deterministic regardless of completion
+    order. Misses and transient failures drop out.
     """
+    window = set(dates)
     tasks = [
-        (origin, destination, fly_date)
+        (origin, destination, month)
         for origin, destination in permutations(airports, 2)
-        for fly_date in dates
+        for month in _months(dates)
     ]
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = [
-            pool.submit(_fetch_row, provider, origin, destination, fly_date, snapshot_date)
-            for origin, destination, fly_date in tasks
+            pool.submit(
+                _fetch_pair_month, source, origin, destination, month, window, snapshot_date
+            )
+            for origin, destination, month in tasks
         ]
-        rows = [future.result() for future in futures]
-    return [row for row in rows if row is not None]
+        blocks = [future.result() for future in futures]
+    return [row for block in blocks for row in block]
 
 
 def curate(rows: list[dict], out_path: str | Path) -> None:
@@ -96,38 +115,54 @@ def curate(rows: list[dict], out_path: str | Path) -> None:
     write_snapshot(rows, out_path)
 
 
+def coverage_line(rows: list[dict], airports: list[str], dates: list[dt.date]) -> str:
+    """One-line HIT summary — quantifies the real-fare gap a Tier 2 source would fill."""
+    routes = len(airports) * (len(airports) - 1)
+    cells = routes * len(dates)
+    priced_routes = {(row["origin"], row["destination"]) for row in rows}
+    pct = 100.0 * len(rows) / cells if cells else 0.0
+    return (
+        f"coverage: {len(rows)}/{cells} cells ({pct:.1f}%), "
+        f"{len(priced_routes)}/{routes} routes with >=1 fare"
+    )
+
+
 def _date_window(start: dt.date, days: int) -> list[dt.date]:
     return [start + dt.timedelta(days=i) for i in range(days)]
 
 
-def _build_provider() -> FareProvider:
-    from tripoptimizer.core.fares.travelpayouts import TravelpayoutsProvider
+def _build_source() -> MonthFareSource:
+    from tripoptimizer.core.fares.month_matrix import MonthMatrixProvider
 
     token = os.environ["TRAVELPAYOUTS_TOKEN"]  # KeyError if absent — fail fast
-    market = os.environ.get("TRAVELPAYOUTS_MARKET", "es")
-    return TravelpayoutsProvider(token, client=httpx.Client(timeout=20.0), market=market)
+    return MonthMatrixProvider(token, client=httpx.Client(timeout=20.0))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build the curated fares snapshot.")
-    parser.add_argument("--airports", nargs="+", required=True)
+    parser.add_argument(
+        "--airports", nargs="+", help="explicit IATA list; overrides --airports-csv"
+    )
+    parser.add_argument(
+        "--airports-csv",
+        type=Path,
+        default=_DEFAULT_AIRPORTS_CSV,
+        help="CSV defining the airport universe (default: the serving list)",
+    )
     parser.add_argument("--start", type=dt.date.fromisoformat, required=True)
     parser.add_argument("--days", type=int, default=10)
     parser.add_argument("--workers", type=int, default=_DEFAULT_WORKERS)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
 
-    provider = _build_provider()
+    airports = args.airports or list(load_airports(args.airports_csv))
+    source = _build_source()
     today = dt.datetime.now().date()
-    rows = collect_rows(
-        provider,
-        args.airports,
-        _date_window(args.start, args.days),
-        today,
-        max_workers=args.workers,
-    )
+    dates = _date_window(args.start, args.days)
+    rows = collect_rows(source, airports, dates, today, max_workers=args.workers)
     curate(rows, args.out)
     print(f"wrote {len(rows)} fares to {args.out}")
+    print(coverage_line(rows, airports, dates))
 
 
 if __name__ == "__main__":

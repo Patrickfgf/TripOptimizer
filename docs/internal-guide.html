@@ -117,7 +117,7 @@
         <tr><td><b>Plan 5</b> — Deploy & docs</td><td>Blueprints Render + Vercel, CI (GitHub Actions: backend+front+e2e), README público (EN), pin de Python 3.12, snapshot ampliado</td><td><span class="status wip">em andamento</span></td></tr>
       </tbody>
     </table>
-    <p class="lead" style="margin-top:10px">* Plan 2 completo, <b>incluindo a Task 9</b> (pull real do Travelpayouts já ingerido no snapshot committed). O demo serve do snapshot + fallback sintético — roda sem key.</p>
+    <p class="lead" style="margin-top:10px">* Plan 2 completo, <b>incluindo a Task 9</b> (pull real do Travelpayouts já ingerido no snapshot committed). O demo serve do snapshot committed + fetch on-demand (month-matrix, quando há token) — real-or-nothing, sem fallback sintético; roda sem key (rotas sem fare real viram <code>incomplete</code>).</p>
   </section>
 
   <section id="arquitetura">
@@ -128,7 +128,7 @@
 ├─ backend/
 │  ├─ core/
 │  │  ├─ optimizer/   # busca da rota mais barata (puro, sem I/O)
-│  │  ├─ fares/       # FareProvider: Travelpayouts | Cached | Synthetic | Fallback
+│  │  ├─ fares/       # FareProvider: Travelpayouts (month-matrix) | Cached | Fallback
 │  │  └─ graph/       # aeroportos/IATA (OurAirports) + haversine
 │  ├─ api/            # FastAPI: /optimize, /airports, /health
 │  ├─ ingestion/      # offline: Travelpayouts → snapshot normalizado (CLI idempotente)
@@ -145,7 +145,7 @@
       <thead><tr><th>Decisão</th><th>Escolha</th><th>Por que não a alternativa</th></tr></thead>
       <tbody>
         <tr><td>Stack</td><td>Python core (FastAPI + DuckDB) + React/TS</td><td>Cobre DE+DS+DA+Full-Stack num projeto só. Descartado TS/Supabase-Edge puro (sub-usa o stack de dados) e Streamlit-only (perde o sinal full-stack).</td></tr>
-        <tr><td>Fonte de fares</td><td>Travelpayouts (cache real) + fallback sintético</td><td>Token grátis e instantâneo; tem cheapest-by-date. Amadeus está descomissionando o self-service (jul/2026); Skyscanner é partner-gated; Kiwi fechou o self-service; Duffel só dá dado sintético no sandbox.</td></tr>
+        <tr><td>Fonte de fares</td><td>Travelpayouts (cache real, real-or-nothing)</td><td>Token grátis e instantâneo; tem cheapest-by-date. Amadeus está descomissionando o self-service (jul/2026); Skyscanner é partner-gated; Kiwi fechou o self-service; Duffel só dá dado sintético no sandbox.</td></tr>
         <tr><td>Reprodutibilidade</td><td>Snapshot committed, nunca live-per-request</td><td>Busca combinatória (~N² lookups) queima qualquer quota e quebra a reprodutibilidade. Snapshot + cache por <code>(origin,dest,date)</code> resolve.</td></tr>
         <tr><td>Algoritmo</td><td>Brute-force (MVP) + Held-Karp (DP sobre subconjuntos)</td><td>Dias fixos ⇒ a data do k-ésimo leg depende só do <em>conjunto</em> já visitado ⇒ DP 2ⁿ·n² exato. Brute-force é também o oráculo de teste.</td></tr>
         <tr><td>Frontend (Plan 4)</td><td>Página única + estado na URL · Warm Bento · mapa SVG keyless</td><td>Router/wizard são scaffolding demais p/ fluxo único. Dark mode é o look "esperado". Mapa por tiles quebra o "roda sem API key".</td></tr>
@@ -158,8 +158,8 @@
     <p>Grão da linha de fare: <span class="mono">1 linha = origin × destination × date × fare</span>. Persistido em Parquet (tipado, colunar), consultado via DuckDB.</p>
     <div class="grid three" style="margin-top:12px">
       <div class="card"><h3>raw → curated</h3><p>Ingestão idempotente: raw read-only → snapshot curado. Re-rodar = mesmo resultado.</p></div>
-      <div class="card"><h3>Proveniência por leg</h3><p><code>Leg.source</code> propaga do provider vencedor até a API; <code>data_source</code> agrega (<code>cached</code>/<code>synthetic</code>/<code>mixed</code>).</p></div>
-      <div class="card"><h3>Fallback gracioso</h3><p>Célula <code>(A,B,date)</code> faltante → fare sintético determinístico. O demo nunca retorna vazio.</p></div>
+      <div class="card"><h3>Proveniência por leg</h3><p><code>Leg.source</code> propaga do provider vencedor até a API; <code>data_source</code> agrega (<code>cached</code>/<code>mixed</code>).</p></div>
+      <div class="card"><h3>Real-or-nothing</h3><p>Célula <code>(A,B,date)</code> sem fare real → resposta <code>incomplete</code> com as rotas faltantes. Nada de fare fabricado.</p></div>
     </div>
   </section>
 

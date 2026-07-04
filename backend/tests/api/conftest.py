@@ -1,5 +1,5 @@
-"""Point the API at a non-existent snapshot so tests see synthetic-only fallback,
-regardless of any committed data/fares_snapshot.parquet."""
+"""Point the API at a non-existent snapshot so tests see an empty fare universe
+(every cell is a miss), regardless of any committed data/fares_snapshot.parquet."""
 
 import pytest
 

@@ -95,7 +95,7 @@ def test_safe_live_passes_fare_through() -> None:
 
 
 def test_safe_live_swallows_exceptions_to_none() -> None:
-    # Serving must degrade to synthetic, never crash, on a live-source error.
+    # Serving must degrade to an unpriced cell, never crash, on a live-source error.
     assert SafeLiveProvider(_RaisingLive()).get_fare("LIS", "BCN", DATE) is None
 
 

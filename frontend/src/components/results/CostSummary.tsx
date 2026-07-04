@@ -1,7 +1,7 @@
 import { Plane } from "lucide-react";
 import { formatEur } from "../../lib/format";
 
-type Props = { total: number; dataSource: "cached" | "synthetic" | "mixed"; snapshotDate: string | null };
+type Props = { total: number; dataSource: "cached" | "mixed"; snapshotDate: string | null };
 
 export function CostSummary({ total, dataSource, snapshotDate }: Props) {
   return (

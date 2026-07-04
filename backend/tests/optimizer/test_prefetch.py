@@ -65,7 +65,7 @@ class _SlowLive:
 
 def test_prefetch_returns_within_its_time_budget() -> None:
     # A slow source must not hold the request open for cells x latency; once the
-    # budget is spent, unwarmed cells fall back to synthetic at optimize time.
+    # budget is spent, unwarmed cells stay unpriced at optimize time.
     provider = CachingLiveProvider(_SlowLive(), InMemoryFareCache())
     started = time.monotonic()
     prefetch(_trip(flex=2), provider, max_workers=2, timeout_s=0.3)

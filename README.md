@@ -135,7 +135,7 @@ Backend → **Render** (`render.yaml`), frontend → **Vercel** (`vercel.json`).
 
 ## Data & provenance
 
-Fares resolve through a `FallbackFareProvider` chain — **committed snapshot (seed) → on-demand live fetch (month-matrix, cached)** — and every leg is labelled `cached` (aggregated per trip to `cached` / `mixed`). There is **no synthetic fallback**: a cell with no real fare stays unpriced and the optimizer reports it as an incomplete result. The serving universe is **46 European airports**.
+Fares resolve through a `FallbackFareProvider` chain — **committed snapshot (seed) → on-demand live fetch (month-matrix, cached)** — and every leg is labelled `cached` (aggregated per trip to `cached` / `mixed`). There is **no synthetic fallback**: a cell with no real fare stays unpriced and the optimizer reports it as an incomplete result. The serving universe is **98 European airports** — the busiest ~100 by passenger traffic (ACI/2025 rankings, minus Russian airports) merged with the original curated list, defined in `backend/data/airports_sample.csv`.
 
 - **On-demand (serving).** With `TRAVELPAYOUTS_TOKEN` set, a cache miss fetches the whole month from Travelpayouts' month-matrix (one call ≈ 30 cells), caches it, and reuses it. Each `/optimize` first warms its trip's `(origin, destination, date)` cells in one concurrent, time-budgeted batch, so the search hits the cache instead of firing hundreds of sequential calls. Without the token the service runs on the committed snapshot only — unpriced routes are reported honestly, never synthesized.
 - **Durable cache (optional).** The default cache is in-process and resets on restart (e.g. Render's free tier sleeps when idle), so popular routes re-fetch on every wake. Set `DATABASE_URL` and the same on-demand fares persist in **Postgres** instead — a parameterized UPSERT with a 7-day freshness TTL (`FARE_CACHE_TTL_DAYS`), behind the same `FareCacheStore` interface, so nothing else changes. This survives restarts and is the unlock toward a wider airport set and a 90-day window. A DB outage degrades to a cold cache, never a 500.
@@ -144,12 +144,14 @@ Fares resolve through a `FallbackFareProvider` chain — **committed snapshot (s
 ```bash
 cd backend
 uv run python -m tripoptimizer.ingestion.build_snapshot \
-  --airports LIS OPO MAD BCN CDG FCO BER ATH --start 2026-07-01 --days 30 --workers 8
+  --start 2026-07-01 --days 90 --workers 8 --out data/fares_snapshot.parquet
 ```
+
+The airport universe defaults to the serving list (`data/airports_sample.csv`), so the snapshot can't silently diverge from what the API serves; pass `--airports LIS BCN …` to override for ad-hoc runs. The ingester uses the same month-matrix endpoint as serving (one call ≈ 30 cells) and prints a coverage summary — the honest measure of the real-fare gap on thin routes.
 
 ## Roadmap
 
-MVP is flights-only route optimization. Post-MVP: buses/trains as additional legs, and nearby-city recommendations (suggest detours that lower total cost). A paid live-search source (e.g. Duffel) can later close the coverage gaps that a cached-price API leaves on thin routes.
+MVP is flights-only route optimization. Post-MVP: buses/trains as additional legs, and nearby-city recommendations (suggest detours that lower total cost). A paid live-search source can later close the coverage gaps that a cached-price API leaves on thin routes (Duffel was evaluated and rejected — no Ryanair/Wizz coverage and ToS hostile to metasearch; SerpAPI's Google Flights endpoint is the current Tier-2 candidate).
 
 ---
 

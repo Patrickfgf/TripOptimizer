@@ -41,6 +41,8 @@ LIMIT 1
 
 _LATEST_DATE_SQL = "SELECT max(snapshot_date) FROM read_parquet(?)"
 
+_COUNT_SQL = "SELECT count(*) FROM read_parquet(?)"
+
 
 def write_snapshot(rows: list[dict], out_path: str | Path) -> None:
     """Write rows to a typed, deduped, stably-sorted Parquet (full overwrite)."""
@@ -55,21 +57,25 @@ def write_snapshot(rows: list[dict], out_path: str | Path) -> None:
             "origin VARCHAR, destination VARCHAR, fly_date DATE, "
             "price DOUBLE, currency VARCHAR, source VARCHAR, snapshot_date DATE)"
         )
-        con.executemany(
-            "INSERT INTO raw VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    r["origin"],
-                    r["destination"],
-                    r["fly_date"],
-                    float(r["price"]),
-                    r["currency"],
-                    r["source"],
-                    r["snapshot_date"],
-                )
-                for r in rows
-            ],
-        )
+        # DuckDB's executemany rejects an empty parameter list; skip it so an empty
+        # `rows` yields a valid 0-row Parquet (schema preserved) instead of crashing —
+        # e.g. a --force rebuild during an upstream outage.
+        if rows:
+            con.executemany(
+                "INSERT INTO raw VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        r["origin"],
+                        r["destination"],
+                        r["fly_date"],
+                        float(r["price"]),
+                        r["currency"],
+                        r["source"],
+                        r["snapshot_date"],
+                    )
+                    for r in rows
+                ],
+            )
         con.execute(_WRITE_SQL, [str(out).replace("\\", "/")])
     finally:
         con.close()
@@ -98,3 +104,17 @@ def latest_snapshot_date(parquet_path: str) -> dt.date | None:
     finally:
         con.close()
     return row[0] if row and row[0] is not None else None
+
+
+def count_rows(parquet_path: str | Path) -> int:
+    """Row count of a snapshot Parquet; 0 if the file is absent (guards use this to
+    know how much good data an overwrite would replace)."""
+    path = Path(parquet_path)
+    if not path.is_file():
+        return 0
+    con = duckdb.connect(database=":memory:")
+    try:
+        row = con.execute(_COUNT_SQL, [str(path).replace("\\", "/")]).fetchone()
+    finally:
+        con.close()
+    return int(row[0]) if row and row[0] is not None else 0

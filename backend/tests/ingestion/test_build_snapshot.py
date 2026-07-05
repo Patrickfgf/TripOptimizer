@@ -285,3 +285,90 @@ def test_collect_rows_fails_loud_on_auth_error(status: int) -> None:
             snapshot_date=SNAP,
             max_workers=2,
         )
+
+
+# --- overwrite guard: don't clobber a good seed when upstream yields few/zero rows ---
+from tripoptimizer.ingestion.build_snapshot import refuse_overwrite_reason  # noqa: E402
+from tripoptimizer.ingestion.snapshot import count_rows  # noqa: E402
+
+
+def _seed_snapshot(out: Path) -> int:
+    """Write a small good snapshot to ``out`` and return its row count."""
+    rows = collect_rows(
+        _FakeMonthSource(), airports=["LIS", "BCN"], dates=[dt.date(2026, 7, 1)], snapshot_date=SNAP
+    )
+    curate(rows, out)
+    return count_rows(out)
+
+
+def test_count_rows_absent_is_zero(tmp_path: Path) -> None:
+    assert count_rows(tmp_path / "nope.parquet") == 0
+
+
+def test_count_rows_matches_written_rows(tmp_path: Path) -> None:
+    out = tmp_path / "snap.parquet"
+    assert _seed_snapshot(out) == 2  # 2 ordered pairs x 1 day
+
+
+def test_refuse_overwrite_allows_first_build_and_normal_variation() -> None:
+    assert refuse_overwrite_reason(0, 0) is None  # nothing to protect
+    assert refuse_overwrite_reason(500, 0) is None  # first build over an absent seed
+    assert refuse_overwrite_reason(900, 1000) is None  # 10% drop is fine
+    assert refuse_overwrite_reason(1500, 1000) is None  # grew
+
+
+def test_refuse_overwrite_blocks_empty_and_drastic_drop() -> None:
+    assert refuse_overwrite_reason(0, 500) is not None  # empty over a good seed
+    assert refuse_overwrite_reason(100, 1000) is not None  # >50% drop
+
+
+def test_main_refuses_empty_overwrite_and_leaves_seed_intact(tmp_path: Path, monkeypatch) -> None:
+    out = tmp_path / "snap.parquet"
+    original = _seed_snapshot(out)
+    assert original > 0
+    # An all-failing upstream (every pair 5xx -> 0 rows) must NOT clobber the seed.
+    monkeypatch.setattr(build_snapshot, "_build_source", lambda: _StatusErrorMonthSource(503))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_snapshot",
+            "--airports",
+            "LIS",
+            "BCN",
+            "--start",
+            "2026-07-01",
+            "--days",
+            "1",
+            "--out",
+            str(out),
+        ],
+    )
+    with pytest.raises(SystemExit):
+        build_snapshot.main()
+    assert count_rows(out) == original  # untouched
+
+
+def test_main_force_overrides_the_guard(tmp_path: Path, monkeypatch) -> None:
+    out = tmp_path / "snap.parquet"
+    _seed_snapshot(out)
+    monkeypatch.setattr(build_snapshot, "_build_source", lambda: _StatusErrorMonthSource(503))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "build_snapshot",
+            "--airports",
+            "LIS",
+            "BCN",
+            "--start",
+            "2026-07-01",
+            "--days",
+            "1",
+            "--out",
+            str(out),
+            "--force",
+        ],
+    )
+    build_snapshot.main()  # --force -> no raise
+    assert count_rows(out) == 0  # forced empty overwrite went through

@@ -33,7 +33,9 @@ testpaths = ["tests"]
 # --cov flags need the dev extras (pytest-cov); always run inside the uv venv.
 # importlib mode lets test files share a basename across dirs (e.g. graph/ and
 # api/ both have test_airports.py) without needing __init__.py package markers.
-addopts = "-q --cov=tripoptimizer --cov-report=term-missing --import-mode=importlib"
+# --cov-fail-under mirrors the frontend's 80% gate; set to 90 with headroom over
+# the current ~99% so a real coverage regression fails CI, not normal variation.
+addopts = "-q --cov=tripoptimizer --cov-report=term-missing --cov-fail-under=90 --import-mode=importlib"
 markers = [
     "integration: requires a real database (set TEST_DATABASE_URL); skipped by default",
 ]

@@ -8,6 +8,11 @@ failures are skipped (those cells simply stay unpriced at serving). curate()
 writes the typed, deduped, stably-sorted Parquet. Re-running on the same
 collected rows produces a byte-identical snapshot (the repo's idempotency rule).
 
+Before writing, main() runs an overwrite guard (refuse_overwrite_reason): a
+rebuild that would replace a good seed with zero/far-fewer rows — the symptom of
+an upstream outage — aborts instead of clobbering the committed snapshot. Pass
+--force to override.
+
 Default CLI run (needs `uv sync --extra ingest` + TRAVELPAYOUTS_TOKEN in env):
     uv run python -m tripoptimizer.ingestion.build_snapshot \
         --start 2026-07-01 --days 90 --workers 8 \
@@ -32,7 +37,7 @@ import httpx
 from tripoptimizer.core.fares.on_demand import MonthFareSource
 from tripoptimizer.core.fares.travelpayouts import RateLimited
 from tripoptimizer.core.graph.airports import load_airports
-from tripoptimizer.ingestion.snapshot import write_snapshot
+from tripoptimizer.ingestion.snapshot import count_rows, write_snapshot
 
 _DEFAULT_WORKERS = 8
 _DEFAULT_AIRPORTS_CSV = Path(__file__).resolve().parents[2] / "data" / "airports_sample.csv"
@@ -42,6 +47,11 @@ _DEFAULT_AIRPORTS_CSV = Path(__file__).resolve().parents[2] / "data" / "airports
 # and must not crash the whole run. Only 401/403 (auth) is systemic and is left
 # to propagate so the run fails loudly instead of writing an empty snapshot.
 _SKIP_ERRORS = (RateLimited, httpx.TransportError)
+
+# A rebuild that would keep fewer than this fraction of the existing snapshot's
+# rows is refused by default (the tell-tale of an upstream outage, not a real
+# drop in coverage) — see refuse_overwrite_reason. --force bypasses it.
+_MIN_RETAIN_FRACTION = 0.5
 
 
 def _fetch_pair_month(
@@ -118,6 +128,25 @@ def curate(rows: list[dict], out_path: str | Path) -> None:
     write_snapshot(rows, out_path)
 
 
+def refuse_overwrite_reason(new_count: int, existing_count: int) -> str | None:
+    """Why a rebuild must NOT overwrite the committed snapshot, or None if it's safe.
+
+    Guards the good seed against a near-empty rebuild when the upstream API has an
+    outage (every pair-month 5xx/400s -> 0 rows). A first build (no existing seed)
+    and normal variation are always allowed; the CLI's --force bypasses this.
+    """
+    if existing_count <= 0:
+        return None  # nothing to protect (first build / empty existing snapshot)
+    if new_count == 0:
+        return f"the rebuild has 0 rows but the existing snapshot has {existing_count}"
+    if new_count < existing_count * _MIN_RETAIN_FRACTION:
+        return (
+            f"the rebuild has {new_count} rows, a steep drop from the existing "
+            f"{existing_count} (< {int(_MIN_RETAIN_FRACTION * 100)}% retained)"
+        )
+    return None
+
+
 def coverage_line(rows: list[dict], airports: list[str], dates: list[dt.date]) -> str:
     """One-line HIT summary — quantifies the real-fare gap a Tier 2 source would fill."""
     routes = len(airports) * (len(airports) - 1)
@@ -156,6 +185,11 @@ def main() -> None:
     parser.add_argument("--days", type=int, default=10)
     parser.add_argument("--workers", type=int, default=_DEFAULT_WORKERS)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite even if the rebuild would clobber the seed with far fewer rows",
+    )
     args = parser.parse_args()
 
     airports = args.airports or list(load_airports(args.airports_csv))
@@ -163,6 +197,13 @@ def main() -> None:
     today = dt.datetime.now().date()
     dates = _date_window(args.start, args.days)
     rows = collect_rows(source, airports, dates, today, max_workers=args.workers)
+    # Guard: don't let an upstream outage (0/few rows) clobber the committed seed.
+    reason = refuse_overwrite_reason(len(rows), count_rows(args.out))
+    if reason and not args.force:
+        raise SystemExit(
+            f"refusing to overwrite {args.out}: {reason}. "
+            f"{coverage_line(rows, airports, dates)}. Re-run with --force to override."
+        )
     curate(rows, args.out)
     print(f"wrote {len(rows)} fares to {args.out}")
     print(coverage_line(rows, airports, dates))
